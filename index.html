@@ -592,7 +592,7 @@ function mixAiSuggest() {
       if (obj.reason) toast(obj.reason);
     }
     btn.disabled=false; btn.textContent='✦ KI-Mischung vorschlagen';
-  }).catch(function(){toast('Verbindungsfehler.');btn.disabled=false;btn.textContent='✦ KI-Mischung vorschlagen';});
+  }).catch(function(err){toast('Fehler: '+(err.message||'?'));btn.disabled=false;btn.textContent='✦ KI-Mischung vorschlagen';});
 }
 
 function renderAll() {
@@ -766,7 +766,7 @@ function getCare(){
           '<div class="care-section-text">'+esc(obj[s.key]||'–')+'</div>'+
         '</div>';
       }).join('')+'</div>';
-  }).catch(function(){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler. Key prüfen.</div>';});
+  }).}).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
 }
 
 function showPanel(name,btn){
