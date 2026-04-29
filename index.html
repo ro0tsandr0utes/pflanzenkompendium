@@ -567,23 +567,23 @@ function mixAiSuggest() {
   if (!name) { document.getElementById('f-err').textContent='Erst Pflanzennamen eingeben.'; return; }
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
   var btn=document.getElementById('mix-ai-btn');
-  btn.disabled=true; btn.textContent='✦ Berechnet…';
-  var subList=SUBS.map(function(s){return s.id+': '+s.name+' — '+s.desc;}).join('\n');
-  var prompt='Du bist Zimmerpflanzen-Substrat-Experte. Optimaler Substratmix für: '+name+'\n\n'+
-    'Verfügbare Produkte (NUR diese):\n'+subList+'\n\n'+
+  btn.disabled=true; btn.textContent='Berechnet...';
+  var subList=SUBS.map(function(s){return s.id+': '+s.name+' - '+s.desc;}).join('\n');
+  var prompt='Du bist Zimmerpflanzen-Substrat-Experte. Optimaler Substratmix fuer: '+name+'\n\n'+
+    'Verfuegbare Produkte (NUR diese):\n'+subList+'\n\n'+
     'Regeln: Nur IDs s1-s8. Anteile = exakt 100. 1-4 Komponenten.\n'+
-    'Kakteen/Sukkulenten: s6-dominant. Epiphyten: s3-dominant. Aroids: s2+Mineralien. Grünpflanzen: s5-Basis.\n'+
-    'Antworte NUR mit JSON: {"mix":[{"id":"s1","pct":40},{"id":"s6","pct":60}],"reason":"Begründung Deutsch"}';
+    'Kakteen/Sukkulenten: s6-dominant. Epiphyten: s3-dominant. Aroids: s2+Mineralien. Gruenpflanzen: s5-Basis.\n'+
+    'Antworte NUR mit JSON: {"mix":[{"id":"s1","pct":40},{"id":"s6","pct":60}],"reason":"Begruendung Deutsch"}';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6':'claude-sonnet-4-20250514',max_tokens:400,system:'Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,system:'Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data) {
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
     var obj;
     try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
-    catch(e){toast('KI-Antwort Fehler.');btn.disabled=false;btn.textContent='✦ KI-Mischung vorschlagen';return;}
+    catch(e){toast('KI-Antwort Fehler.');btn.disabled=false;btn.textContent='KI-Mischung vorschlagen';return;}
     if (obj.mix&&Array.isArray(obj.mix)) {
       mixRows=obj.mix.filter(function(m){return SUBS.some(function(s){return s.id===m.id;});}).map(function(m){return {subId:m.id,pct:m.pct};});
       var sum=mixRows.reduce(function(a,r){return a+r.pct;},0);
@@ -591,8 +591,8 @@ function mixAiSuggest() {
       renderMixBuilder();
       if (obj.reason) toast(obj.reason);
     }
-    btn.disabled=false; btn.textContent='✦ KI-Mischung vorschlagen';
-  }).catch(function(err){toast('Fehler: '+(err.message||'?'));btn.disabled=false;btn.textContent='✦ KI-Mischung vorschlagen';});
+    btn.disabled=false; btn.textContent='KI-Mischung vorschlagen';
+  }).catch(function(err){toast('Fehler '+(err.message||'unbekannt'));btn.disabled=false;btn.textContent='KI-Mischung vorschlagen';});
 }
 
 function renderAll() {
