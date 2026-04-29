@@ -407,14 +407,14 @@ var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
 
 var SUBS = [
-  {id:'s1',name:'Compo Bio Granulat Indoor (2-5 mm)',   desc:'100% natuerlicher Bimsstein, Koernung 2-5 mm. Rein mineralisch. Farbwechsel als Giessanzeiger.',leer:false},
-  {id:'s2',name:'Green Home Monstera Erde',              desc:'Perlite, Kokosfasern, Rindenhumus, Weisstorf, Holzfasern. pH 5,8. Langzeitduenger ca. 12 Wochen.',leer:false},
-  {id:'s3',name:'Compo Sana Orchideenrinde',             desc:'Pinienrinde, Hochmoortorf H3-H8, Kalk, NPK-Duenger. pH 5,0-6,5. Fuer Epiphyten und Luftwurzler.',leer:false},
-  {id:'s4',name:'Floragard Green Jungle Mix (8-12 mm)', desc:'100% mineralisch, torffrei. Bims, Zeolith, Lava, Koernung 8-12 mm. Semi-Hydro-geeignet.',leer:false},
-  {id:'s5',name:'Compo Sana Gruenpflanzen & Palmenerde',desc:'Hochmoortorf H3-H8, Perlite, Kalk, NPK-Duenger, Agrosil. pH 5,7. 12 Wochen Naehrstoffe.',leer:false},
-  {id:'s6',name:'SYBAStones Cacti & Succulent',          desc:'Lavafelsen, Bimsstein, Zeolith (1:1:1), Koernung 2-5 mm. 180-Tage-Langzeitduenger. Erdlos.',leer:false},
-  {id:'s7',name:'Seramis Kakteen & Sukkulenten',         desc:'Seramis Tongranulat, Lava, gebrochener Blaehton. Vollstaendiger Erdersatz.',leer:true},
-  {id:'s8',name:'Frux Blaehton 8-16 mm',                desc:'Reiner gebrannter Ton, Koernung 8-16 mm. Neutral, naehrstofffrei. Nur als Drainageschicht.',leer:true}
+  {id:'s1',name:'Compo Bio Granulat Indoor (2-5 mm)',   desc:'100% natürlicher Bimsstein, Körnung 2-5 mm. Rein mineralisch. Farbwechsel als Gießanzeiger.',leer:false},
+  {id:'s2',name:'Green Home Monstera Erde',              desc:'Perlite, Kokosfasern, Rindenhumus, Weißtorf, Holzfasern. pH 5,8. Langzeitdünger ca. 12 Wochen.',leer:false},
+  {id:'s3',name:'Compo Sana Orchideenrinde',             desc:'Pinienrinde, Hochmoortorf H3-H8, Kalk, NPK-Dünger. pH 5,0-6,5. Für Epiphyten und Luftwurzler.',leer:false},
+  {id:'s4',name:'Floragard Green Jungle Mix (8-12 mm)', desc:'100% mineralisch, torffrei. Bims, Zeolith, Lava, Körnung 8-12 mm. Semi-Hydro-geeignet.',leer:false},
+  {id:'s5',name:'Compo Sana Grünpflanzen & Palmenerde',desc:'Hochmoortorf H3-H8, Perlite, Kalk, NPK-Dünger, Agrosil. pH 5,7. 12 Wochen Nährstoffe.',leer:false},
+  {id:'s6',name:'SYBAStones Cacti & Succulent',          desc:'Lavafelsen, Bimsstein, Zeolith (1:1:1), Körnung 2-5 mm. 180-Tage-Langzeitdünger. Erdlos.',leer:false},
+  {id:'s7',name:'Seramis Kakteen & Sukkulenten',         desc:'Seramis Tongranulat, Lava, gebrochener Blähton. Vollständiger Erdersatz.',leer:true},
+  {id:'s8',name:'Frux Blähton 8-16 mm',                desc:'Reiner gebrannter Ton, Körnung 8-16 mm. Neutral, nährstofffrei. Nur als Drainageschicht.',leer:true}
 ];
 
 var CARE_S = [
@@ -435,7 +435,7 @@ function loadCfg() {
 function saveConfig() {
   var url = document.getElementById('cfg-url').value.trim();
   var key = document.getElementById('cfg-key').value.trim();
-  if (!url||!key) { document.getElementById('cfg-err').textContent='Beide Felder ausfuellen.'; return; }
+  if (!url||!key) { document.getElementById('cfg-err').textContent='Beide Felder ausfüllen.'; return; }
   try { localStorage.setItem('pfk_url',url); localStorage.setItem('pfk_key',key); } catch(e){}
   cfg = {url:url, key:key};
   document.getElementById('cfg-err').textContent='';
@@ -463,7 +463,7 @@ function apiFetch(params) {
 function seedPlants() {
   var btn=document.getElementById('seed-btn'), st=document.getElementById('seed-status');
   if (!cfg.url) { document.getElementById('cfg-err').textContent='Zuerst URL speichern.'; return; }
-  btn.disabled=true; btn.textContent='Importiert...';
+  btn.disabled=true; btn.textContent='Importiert…';
   apiFetch({action:'seed'}).then(function(res) {
     st.textContent = res.ok
       ? (res.data&&res.data.seeded ? res.data.seeded+' Pflanzen importiert' : (res.data&&res.data.skipped ? res.data.skipped : 'OK'))
@@ -483,7 +483,7 @@ function init() {
     if (!res.ok) toast('Fehler: '+(res.error||'Unbekannt'));
     showLoading(false); renderAll();
   }).catch(function() {
-    toast('Verbindungsfehler - Apps Script URL pruefen');
+    toast('Verbindungsfehler - Apps Script URL prüfen');
     plants=[]; showLoading(false); renderAll();
   });
 }
@@ -567,7 +567,7 @@ function mixAiSuggest() {
   if (!name) { document.getElementById('f-err').textContent='Erst Pflanzennamen eingeben.'; return; }
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
   var btn=document.getElementById('mix-ai-btn');
-  btn.disabled=true; btn.textContent='Berechnet...';
+  btn.disabled=true; btn.textContent='Berechnet…';
   var subList=SUBS.map(function(s){return s.id+': '+s.name+' - '+s.desc;}).join('\n');
   var prompt='Du bist Zimmerpflanzen-Substrat-Experte. Optimaler Substratmix fuer: '+name+'\n\n'+
     'Verfuegbare Produkte (NUR diese):\n'+subList+'\n\n'+
@@ -617,7 +617,7 @@ function renderGrid() {
         '<button class="act-btn" onclick="startEdit(\''+p.id+'\')">Bearbeiten</button>'+
         '<button class="act-btn care" onclick="useCare(\''+esc(p.name)+'\')">Pflege</button>'+
         '<button class="act-btn mix-btn" onclick="startEditMix(\''+p.id+'\')">'+(hasMix?'Mix':'+ Mix')+'</button>'+
-        '<button class="act-btn del" onclick="delPlant(\''+p.id+'\')">Loeschen</button>'+
+        '<button class="act-btn del" onclick="delPlant(\''+p.id+'\')">Löschen</button>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -663,7 +663,7 @@ function openAddForm() {
   document.getElementById('f-notes').value='';
   document.getElementById('f-err').textContent='';
   document.getElementById('f-hint').textContent='';
-  document.getElementById('form-title').textContent='Pflanze hinzufuegen';
+  document.getElementById('form-title').textContent='Pflanze hinzufügen';
   document.getElementById('form-panel').style.display='block';
   renderMixBuilder();
   document.getElementById('f-name').focus();
@@ -697,7 +697,7 @@ function saveForm() {
   if (mixRows.length>0&&sum!==100){document.getElementById('f-err').textContent='Mix ergibt '+sum+'% - muss 100% sein.';return;}
   var subMix=serializeMix(mixRows);
   var isEdit=!!editId, id=editId||uid();
-  document.getElementById('f-hint').textContent='Speichert...';
+  document.getElementById('f-hint').textContent='Speichert…';
   document.getElementById('f-err').textContent='';
   apiFetch({action:isEdit?'update':'add',id:id,name:name,subId:subId,subMix:subMix,notes:notes}).then(function(res){
     if (res.ok) {
@@ -705,7 +705,7 @@ function saveForm() {
       else{plants.push({id:id,name:name,subId:subId,subMix:subMix,notes:notes});}
       editId=null; mixRows=[];
       document.getElementById('form-panel').style.display='none';
-      toast(isEdit?'Aktualisiert':'Hinzugefuegt');
+      toast(isEdit?'Aktualisiert':'Hinzugefügt');
       renderAll();
     } else {
       document.getElementById('f-hint').textContent='';
@@ -720,9 +720,9 @@ function saveForm() {
 function cancelForm(){editId=null;mixRows=[];document.getElementById('form-panel').style.display='none';}
 
 function delPlant(id){
-  if (!confirm('Diese Pflanze wirklich loeschen?')) return;
+  if (!confirm('Diese Pflanze wirklich löschen?')) return;
   apiFetch({action:'delete',id:id}).then(function(res){
-    if(res.ok){plants=plants.filter(function(p){return p.id!==id;});toast('Geloescht');renderAll();}
+    if(res.ok){plants=plants.filter(function(p){return p.id!==id;});toast('Gelöscht');renderAll();}
     else toast('Fehler: '+(res.error||'?'));
   }).catch(function(){toast('Verbindungsfehler');});
 }
