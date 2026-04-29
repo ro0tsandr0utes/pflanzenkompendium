@@ -253,7 +253,17 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .setup-card {
   background: white; border-radius: 16px;
   padding: 2rem 2.25rem; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;
+  position: relative;
 }
+.setup-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 32px; height: 32px;
+  border: none; background: none; cursor: pointer;
+  font-size: 22px; line-height: 1; color: var(--muted);
+  border-radius: 50%; transition: all .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.setup-close:hover { background: var(--bg); color: var(--text); }
 .setup-leaf { font-size: 32px; margin-bottom: .5rem; }
 .setup-title { font-family: 'Playfair Display', serif; font-size: 22px; margin-bottom: .375rem; color: var(--text); }
 .setup-sub { font-size: 13px; color: var(--muted); margin-bottom: 1.75rem; line-height: 1.6; }
@@ -288,11 +298,31 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .care-banner-text { flex: 1; }
 .care-banner-text strong { font-weight: 500; }
 
+.care-events-fold {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-l);
+  padding-top: 8px;
+  font-size: 13px;
+}
+.care-banner.today .care-events-fold { border-top-color: rgba(58,107,26,.2); }
+.care-events-fold summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+}
+.care-events-fold summary::-webkit-details-marker { display: none; }
+.care-events-fold summary:hover { color: var(--g2); }
+.care-events-fold[open] summary { margin-bottom: 8px; }
+.care-banner.today .care-events-fold summary { color: var(--g1); }
+.care-banner.today .care-events-fold summary:hover { color: var(--g2); }
+
 .care-events {
   display: flex; flex-direction: column; gap: 6px;
-  padding-top: 8px; border-top: 1px solid var(--border-l);
 }
-.care-banner.today .care-events { border-top-color: rgba(58,107,26,.2); }
 .care-event {
   display: flex; align-items: flex-start; gap: 10px;
   font-size: 13px; line-height: 1.5;
@@ -426,8 +456,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 </head>
 <body>
 
-<div class="overlay" id="overlay">
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeSettings()">
   <div class="setup-card">
+    <button class="setup-close" id="setup-close" onclick="closeSettings()" title="Schließen" style="display:none">×</button>
     <div class="setup-leaf">🌿</div>
     <div class="setup-title">Pflanzenkompendium</div>
     <div class="setup-sub">Einmalige Einrichtung. Alle Daten werden nur in deinem Browser gespeichert.</div>
@@ -727,7 +758,13 @@ function openSettings() {
   document.getElementById('cfg-key').value = cfg.key||'';
   document.getElementById('cfg-err').textContent='';
   document.getElementById('seed-status').textContent='';
+  // X nur anbieten wenn schon konfiguriert ist - sonst bleibt User ohne URL/Key haengen
+  document.getElementById('setup-close').style.display = (cfg.url && cfg.key) ? 'flex' : 'none';
   document.getElementById('overlay').classList.remove('hidden');
+}
+function closeSettings() {
+  if (!cfg.url || !cfg.key) return; // Erstkonfiguration nicht abbrechbar
+  document.getElementById('overlay').classList.add('hidden');
 }
 
 function apiFetch(params) {
@@ -996,7 +1033,7 @@ function upcomingEvents(months, includeActive) {
 
 function renderEventsBlock(events) {
   if (!events.length) return '';
-  return '<div class="care-events">'+events.map(function(e) {
+  var rows = events.map(function(e) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
@@ -1004,7 +1041,10 @@ function renderEventsBlock(events) {
       '</div>'+
       '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓ Erledigt</button>'+
     '</div>';
-  }).join('')+'</div>';
+  }).join('');
+  return '<details class="care-events-fold"><summary>🍂 '+events.length+' '+
+    (events.length===1?'saisonaler Hinweis':'saisonale Hinweise')+
+    '</summary><div class="care-events">'+rows+'</div></details>';
 }
 
 function renderBanner() {
@@ -1631,6 +1671,9 @@ function toast(msg){
     document.getElementById('overlay').classList.add('hidden');
     init();
   }
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') closeSettings();
+  });
 })();
 </script>
 </body>
