@@ -243,6 +243,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .sub-name { font-size: 14px; font-weight: 500; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sub-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
 .leer-tag { font-size: 10px; padding: 1px 8px; border-radius: 10px; background: var(--amber-l); color: var(--amber); font-weight: 500; }
+.inactive-tag { font-size: 10px; padding: 1px 8px; border-radius: 10px; background: var(--bg); color: var(--muted); font-weight: 500; border: 1px solid var(--border); }
+.sub-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.sub-item.inactive { opacity: .6; }
 
 .overlay {
   position: fixed; inset: 0; z-index: 500;
@@ -599,6 +602,43 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   </div>
 
   <div id="panel-substrate" class="panel">
+    <div class="toolbar">
+      <span style="font-size:13px;color:var(--muted);flex:1">Substrate verwalten — bestehende ID bleibt für historische Mixes erhalten.</span>
+      <button class="btn primary" onclick="openSubForm()">+ Substrat</button>
+    </div>
+
+    <div class="form-panel" id="sub-form-panel" style="display:none">
+      <div class="form-title" id="sub-form-title">Substrat hinzufügen</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;min-width:200px">
+          <label class="form-label">Name</label>
+          <input class="form-input" id="sf-name" placeholder="z.B. Floragard Bio Universalerde" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <input class="form-input" id="sf-desc" placeholder="Zusammensetzung, pH, Eigenschaften…" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
+          <input type="checkbox" id="sf-leer" style="width:16px;height:16px" />
+          <label for="sf-leer" style="font-size:13px;cursor:pointer">Restbestand (fast leer)</label>
+        </div>
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
+          <input type="checkbox" id="sf-active" checked style="width:16px;height:16px" />
+          <label for="sf-active" style="font-size:13px;cursor:pointer">Aktiv (für neue Mixes)</label>
+        </div>
+      </div>
+      <div class="form-actions" style="margin-top:.875rem">
+        <button class="btn primary sm" onclick="saveSubForm()">Speichern</button>
+        <button class="btn sm ghost" onclick="cancelSubForm()">Abbrechen</button>
+        <span class="form-err" id="sf-err"></span>
+        <span class="form-hint" id="sf-hint"></span>
+      </div>
+    </div>
+
     <div class="sub-list" id="sub-list"></div>
   </div>
 
@@ -608,16 +648,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C1D','#686860'];
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
 
-var SUBS = [
-  {id:'s1',name:'Compo Bio Granulat Indoor (2-5 mm)',   desc:'100% natürlicher Bimsstein, Körnung 2-5 mm. Rein mineralisch. Farbwechsel als Gießanzeiger.',leer:false},
-  {id:'s2',name:'Green Home Monstera Erde',              desc:'Perlite, Kokosfasern, Rindenhumus, Weißtorf, Holzfasern. pH 5,8. Langzeitdünger ca. 12 Wochen.',leer:false},
-  {id:'s3',name:'Compo Sana Orchideenrinde',             desc:'Pinienrinde, Hochmoortorf H3-H8, Kalk, NPK-Dünger. pH 5,0-6,5. Für Epiphyten und Luftwurzler.',leer:false},
-  {id:'s4',name:'Floragard Green Jungle Mix (8-12 mm)', desc:'100% mineralisch, torffrei. Bims, Zeolith, Lava, Körnung 8-12 mm. Semi-Hydro-geeignet.',leer:false},
-  {id:'s5',name:'Compo Sana Grünpflanzen & Palmenerde',desc:'Hochmoortorf H3-H8, Perlite, Kalk, NPK-Dünger, Agrosil. pH 5,7. 12 Wochen Nährstoffe.',leer:false},
-  {id:'s6',name:'SYBAStones Cacti & Succulent',          desc:'Lavafelsen, Bimsstein, Zeolith (1:1:1), Körnung 2-5 mm. 180-Tage-Langzeitdünger. Erdlos.',leer:false},
-  {id:'s7',name:'Seramis Kakteen & Sukkulenten',         desc:'Seramis Tongranulat, Lava, gebrochener Blähton. Vollständiger Erdersatz.',leer:true},
-  {id:'s8',name:'Frux Blähton 8-16 mm',                desc:'Reiner gebrannter Ton, Körnung 8-16 mm. Neutral, nährstofffrei. Nur als Drainageschicht.',leer:true}
-];
+// SUBS wird beim init() vom Backend geladen (Endpoint: action=getSubs).
+// Felder: {id, name, desc, leer, active}. Sub kommt als String -> in convertSubs normalisiert.
+var SUBS = [];
 
 var CARE_S = [
   {key:'giessen',      label:'Gießen',         color:'#1565C0', icon:'💧'},
@@ -793,20 +826,42 @@ function seedPlants() {
   });
 }
 
+function convertSubs(rawSubs) {
+  // Backend liefert leer/active als Strings - in Booleans wandeln
+  return (rawSubs || []).map(function(s) {
+    return {
+      id: s.id,
+      name: s.name,
+      desc: s.desc,
+      leer: s.leer === 'true',
+      active: s.active === 'true' || s.active === '' // leer = default active
+    };
+  });
+}
+
 function init() {
   showLoading(true);
-  apiFetch({action:'getAll'}).then(function(res) {
-    plants = res.ok ? (res.data||[]) : [];
-    if (!res.ok) toast('Fehler: '+(res.error||'Unbekannt'));
+  Promise.all([
+    apiFetch({action:'getSubs'}),
+    apiFetch({action:'getAll'})
+  ]).then(function(results) {
+    var subRes = results[0], plantRes = results[1];
+    SUBS = subRes.ok ? convertSubs(subRes.data || []) : [];
+    plants = plantRes.ok ? (plantRes.data || []) : [];
+    if (!subRes.ok) toast('Fehler beim Laden der Substrate: ' + (subRes.error || '?'));
+    if (!plantRes.ok) toast('Fehler beim Laden der Pflanzen: ' + (plantRes.error || '?'));
     showLoading(false); renderAll();
   }).catch(function() {
     toast('Verbindungsfehler - Apps Script URL prüfen');
-    plants=[]; showLoading(false); renderAll();
+    SUBS = []; plants = []; showLoading(false); renderAll();
   });
 }
 
 function uid() { return 'p'+Date.now()+Math.random().toString(36).slice(2,5); }
 function si(id) { return SUBS.findIndex(function(s){return s.id===id;}); }
+function activeSubs() { return SUBS.filter(function(s){return s.active;}); }
+function subColor(idx) { return idx >= 0 ? COLORS[idx % COLORS.length] : '#888'; }
+function subBg(idx) { return idx >= 0 ? BGS[idx % BGS.length] : '#eee'; }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -824,17 +879,17 @@ function renderMixBadges(mixStr, subId) {
   var rows = parseMix(mixStr);
   if (rows.length > 0) {
     var bar = rows.map(function(r) {
-      var i=si(r.subId), col=i>=0?COLORS[i]:'#aaa';
+      var i=si(r.subId), col=subColor(i);
       return '<div class="mix-bar-seg" style="width:'+r.pct+'%;background:'+col+'"></div>';
     }).join('');
     var badges = rows.map(function(r) {
-      var i=si(r.subId), col=i>=0?COLORS[i]:'#888', bg=i>=0?BGS[i]:'#eee';
+      var i=si(r.subId), col=subColor(i), bg=subBg(i);
       var nm=i>=0?SUBS[i].name.split(' ').slice(0,3).join(' '):r.subId;
       return '<span class="mix-badge" style="background:'+bg+';color:'+col+';border:1px solid '+col+'30">'+esc(nm)+'<span class="mix-badge-pct"> '+r.pct+'%</span></span>';
     }).join('');
     return '<div class="mix-bar">'+bar+'</div><div class="mix-badges">'+badges+'</div>';
   }
-  var i=si(subId), col=i>=0?COLORS[i]:'#888', bg=i>=0?BGS[i]:'#eee';
+  var i=si(subId), col=subColor(i), bg=subBg(i);
   var sn=i>=0?SUBS[i].name.split(' ').slice(0,3).join(' ')+'...':'?';
   return '<span class="sub-badge" style="background:'+bg+';color:'+col+';border:1px solid '+col+'" title="'+(i>=0?esc(SUBS[i].name):'')+'">'+esc(sn)+'</span>';
 }
@@ -845,7 +900,7 @@ function renderMixBuilder() {
   var fillEl=document.getElementById('mix-fill');
   var labelEl=document.getElementById('mix-total-label');
   rowsEl.innerHTML = mixRows.map(function(r,i) {
-    var idx=si(r.subId), col=idx>=0?COLORS[idx]:'#888';
+    var idx=si(r.subId), col=subColor(idx);
     var nm=idx>=0?SUBS[idx].name.split('(')[0].trim():r.subId;
     return '<div class="mix-row">'+
       '<div class="mix-row-dot" style="background:'+col+'"></div>'+
@@ -865,7 +920,7 @@ function renderMixBuilder() {
   } else { totalEl.style.display='none'; }
   var used={};
   mixRows.forEach(function(r){used[r.subId]=true;});
-  document.getElementById('mix-add-sel').innerHTML=SUBS.filter(function(s){return !used[s.id];}).map(function(s) {
+  document.getElementById('mix-add-sel').innerHTML=activeSubs().filter(function(s){return !used[s.id];}).map(function(s) {
     return '<option value="'+s.id+'">'+s.name.split('(')[0].trim()+'</option>';
   }).join('');
 }
@@ -885,11 +940,15 @@ function mixAiSuggest() {
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
   var btn=document.getElementById('mix-ai-btn');
   btn.disabled=true; btn.textContent='Berechnet…';
-  var subList=SUBS.map(function(s){return s.id+': '+s.name+' - '+s.desc;}).join('\n');
+  var avail = activeSubs();
+  var subList=avail.map(function(s){return s.id+': '+s.name+(s.leer?' [Restbestand - bevorzugen, kann aber knapp sein]':'')+' - '+s.desc;}).join('\n');
+  var ids = avail.map(function(s){return s.id;}).join(',');
   var prompt='Du bist Zimmerpflanzen-Substrat-Experte. Optimaler Substratmix fuer: '+name+'\n\n'+
     'Verfuegbare Produkte (NUR diese):\n'+subList+'\n\n'+
-    'Regeln: Nur IDs s1-s8. Anteile = exakt 100. 1-4 Komponenten.\n'+
-    'Kakteen/Sukkulenten: s6-dominant. Epiphyten: s3-dominant. Aroids: s2+Mineralien. Gruenpflanzen: s5-Basis.\n'+
+    'Regeln: Nur IDs aus dieser Liste ('+ids+'). Anteile = exakt 100. 1-4 Komponenten.\n'+
+    'Wenn ein Produkt als Restbestand markiert ist, BEVORZUGE es, damit es aufgebraucht wird. '+
+    'Falls der Restbestand mengenmaessig nicht ausreicht, mit einem nicht-leeren Produkt aehnlicher Eigenschaft mischen.\n'+
+    'Faustregeln: Kakteen/Sukkulenten mineralisch-dominant. Epiphyten rindenbasiert. Aroids erdig + Mineralien. Gruenpflanzen Erde-Basis.\n'+
     'Antworte NUR mit JSON: {"mix":[{"id":"s1","pct":40},{"id":"s6","pct":60}],"reason":"Begruendung Deutsch"}';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -917,6 +976,7 @@ function renderAll() {
   renderNextEventTeaser();
   renderGrid(); renderSubSelects(); renderCareChips();
   renderCalendarPanel();
+  renderSubList();
   document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
 }
 
@@ -1284,19 +1344,140 @@ function renderSubSelects() {
       var nm=i>=0?SUBS[i].name.split(' ').slice(0,3).join(' '):id;
       return '<option value="'+id+'"'+(cur===id?' selected':'')+'>'+nm+' ('+cnt+')</option>';
     }).join('');
-  document.getElementById('f-sub').innerHTML=SUBS.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
+  document.getElementById('f-sub').innerHTML=activeSubs().map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
 }
 
 function renderSubList() {
-  document.getElementById('sub-list').innerHTML=SUBS.map(function(s,i){
-    return '<div class="sub-item">'+
-      '<div class="sub-dot" style="background:'+COLORS[i]+'"></div>'+
-      '<div>'+
-        '<div class="sub-name">'+esc(s.name)+(s.leer?' <span class="leer-tag">fast leer</span>':'')+' </div>'+
+  var box = document.getElementById('sub-list');
+  if (!SUBS.length) {
+    box.innerHTML = '<div class="empty">Keine Substrate geladen.</div>';
+    return;
+  }
+  box.innerHTML=SUBS.map(function(s,i){
+    var dotColor = subColor(i);
+    var tags = '';
+    if (s.leer) tags += ' <span class="leer-tag">Restbestand</span>';
+    if (!s.active) tags += ' <span class="inactive-tag">inaktiv</span>';
+    return '<div class="sub-item'+(s.active?'':' inactive')+'">'+
+      '<div class="sub-dot" style="background:'+dotColor+'"></div>'+
+      '<div style="flex:1">'+
+        '<div class="sub-name">'+esc(s.name)+tags+'</div>'+
         '<div class="sub-desc">'+esc(s.desc)+'</div>'+
+        '<div class="sub-actions">'+
+          '<button class="act-btn" onclick="startEditSub(\''+s.id+'\')">Bearbeiten</button>'+
+          '<button class="act-btn" onclick="toggleSubLeer(\''+s.id+'\')">'+(s.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
+          '<button class="act-btn" onclick="toggleSubActive(\''+s.id+'\')">'+(s.active?'Deaktivieren':'Aktivieren')+'</button>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }).join('');
+}
+
+var subEditId = null;
+
+function openSubForm() {
+  subEditId = null;
+  document.getElementById('sub-form-title').textContent = 'Substrat hinzufügen';
+  document.getElementById('sf-name').value = '';
+  document.getElementById('sf-desc').value = '';
+  document.getElementById('sf-leer').checked = false;
+  document.getElementById('sf-active').checked = true;
+  document.getElementById('sf-err').textContent = '';
+  document.getElementById('sf-hint').textContent = '';
+  document.getElementById('sub-form-panel').style.display = 'block';
+  document.getElementById('sf-name').focus();
+}
+
+function startEditSub(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  subEditId = id;
+  document.getElementById('sub-form-title').textContent = 'Substrat bearbeiten ('+id+')';
+  document.getElementById('sf-name').value = s.name || '';
+  document.getElementById('sf-desc').value = s.desc || '';
+  document.getElementById('sf-leer').checked = !!s.leer;
+  document.getElementById('sf-active').checked = !!s.active;
+  document.getElementById('sf-err').textContent = '';
+  document.getElementById('sf-hint').textContent = '';
+  document.getElementById('sub-form-panel').style.display = 'block';
+  document.getElementById('sf-name').focus();
+}
+
+function cancelSubForm() {
+  subEditId = null;
+  document.getElementById('sub-form-panel').style.display = 'none';
+}
+
+function nextSubId() {
+  // hoechste numerische sN-ID + 1
+  var max = 0;
+  SUBS.forEach(function(s){
+    var m = /^s(\d+)$/.exec(s.id);
+    if (m) { var n = parseInt(m[1]); if (n > max) max = n; }
+  });
+  return 's' + (max + 1);
+}
+
+function saveSubForm() {
+  var name = document.getElementById('sf-name').value.trim();
+  var desc = document.getElementById('sf-desc').value.trim();
+  var leer = document.getElementById('sf-leer').checked;
+  var active = document.getElementById('sf-active').checked;
+  if (!name) { document.getElementById('sf-err').textContent = 'Name fehlt'; return; }
+  var isEdit = !!subEditId;
+  var id = subEditId || nextSubId();
+  document.getElementById('sf-hint').textContent = 'Speichert…';
+  document.getElementById('sf-err').textContent = '';
+  apiFetch({
+    action: isEdit ? 'updateSub' : 'addSub',
+    id: id, name: name, desc: desc,
+    leer: leer ? 'true' : 'false',
+    active: active ? 'true' : 'false'
+  }).then(function(res){
+    if (res.ok) {
+      if (isEdit) {
+        var s = SUBS.find(function(x){return x.id===id;});
+        if (s) { s.name=name; s.desc=desc; s.leer=leer; s.active=active; }
+      } else {
+        SUBS.push({id:id, name:name, desc:desc, leer:leer, active:active});
+      }
+      subEditId = null;
+      document.getElementById('sub-form-panel').style.display = 'none';
+      toast(isEdit ? 'Substrat aktualisiert' : 'Substrat hinzugefügt');
+      renderSubList();
+      renderSubSelects();
+    } else {
+      document.getElementById('sf-hint').textContent = '';
+      document.getElementById('sf-err').textContent = 'Fehler: '+(res.error||'?');
+    }
+  }).catch(function(){
+    document.getElementById('sf-hint').textContent = '';
+    document.getElementById('sf-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+function toggleSubActive(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  var newVal = !s.active;
+  s.active = newVal;
+  apiFetch({action:'updateSub', id:id, active:newVal?'true':'false'}).then(function(res){
+    if (!res.ok) { s.active = !newVal; toast('Fehler: '+(res.error||'?')); }
+    else toast(newVal ? 'Aktiviert' : 'Deaktiviert');
+    renderSubList(); renderSubSelects();
+  }).catch(function(){ s.active = !newVal; toast('Verbindungsfehler'); renderSubList(); });
+}
+
+function toggleSubLeer(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  var newVal = !s.leer;
+  s.leer = newVal;
+  apiFetch({action:'updateSub', id:id, leer:newVal?'true':'false'}).then(function(res){
+    if (!res.ok) { s.leer = !newVal; toast('Fehler: '+(res.error||'?')); }
+    else toast(newVal ? 'Als Restbestand markiert' : 'Als vollwertig markiert');
+    renderSubList();
+  }).catch(function(){ s.leer = !newVal; toast('Verbindungsfehler'); renderSubList(); });
 }
 
 function renderCareChips() {
@@ -1464,7 +1645,7 @@ function getCare(forceRefresh){
   }
 
   box.innerHTML='<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>';
-  var subTxt=SUBS.map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (fast leer)':'')+' - '+s.desc;}).join('\n');
+  var subTxt=activeSubs().map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
   var ctx='';
   if(entry){
     var mr=parseMix(entry.subMix);
@@ -1565,7 +1746,7 @@ function bulkRefreshCare() {
   btn.textContent = 'Läuft…';
   var ok = 0, fail = 0;
   var i = 0;
-  var subTxt = SUBS.map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (fast leer)':'')+' - '+s.desc;}).join('\n');
+  var subTxt = activeSubs().map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
   var todayIso = toIsoDate(new Date());
 
   function next() {
