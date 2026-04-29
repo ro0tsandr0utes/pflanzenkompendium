@@ -746,7 +746,6 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <input class="search" id="care-q" placeholder="Pflanzennamen eingeben — auch für Pflanzen, die nicht in der Sammlung sind" onkeydown="if(event.key==='Enter')getCare()" style="font-size:15px;height:44px" />
       <button class="btn primary" onclick="getCare()" style="height:44px">Pflegeplan abrufen</button>
     </div>
-    <div class="care-chips" id="care-chips"></div>
     <div class="care-result" id="care-result">
       <div class="care-placeholder">Schneller Pflegeplan-Lookup. Für Pflanzen aus der Sammlung steht der gespeicherte Plan auch im Details-Modal (Tab "Pflegeplan").</div>
     </div>
@@ -1130,7 +1129,7 @@ function mixAiSuggest() {
 function renderAll() {
   renderBanner();
   renderNextEventTeaser();
-  renderGrid(); renderSubSelects(); renderCareChips();
+  renderGrid(); renderSubSelects();
   renderCalendarPanel();
   renderSubList();
   document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
@@ -1620,12 +1619,6 @@ function toggleSubLeer(id) {
     else toast(newVal ? 'Als Restbestand markiert' : 'Als vollwertig markiert');
     renderSubList();
   }).catch(function(){ s.leer = !newVal; toast('Verbindungsfehler'); renderSubList(); });
-}
-
-function renderCareChips() {
-  document.getElementById('care-chips').innerHTML=plants.slice(0,16).map(function(p){
-    return '<button class="chip" onclick="useCare(\''+esc(p.name)+'\')">'+esc(p.name.split('(')[0].trim())+'</button>';
-  }).join('');
 }
 
 function showLoading(on){document.getElementById('grid-loading').style.display=on?'block':'none';}
@@ -2400,7 +2393,6 @@ function showPanel(name,btn){
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   btn.classList.add('on');
   document.getElementById('panel-'+name).classList.add('on');
-  if(name==='berater') renderCareChips();
   if(name==='substrate') renderSubList();
   if(name==='kalender') renderCalendarPanel();
 }
