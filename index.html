@@ -737,7 +737,7 @@ function getCare(){
   var q=document.getElementById('care-q').value.trim(); if(!q) return;
   var box=document.getElementById('care-result');
   box.innerHTML='<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>';
-  var subTxt=SUBS.map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (fast leer)':'')+' — '+s.desc;}).join('\n');
+  var subTxt=SUBS.map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (fast leer)':'')+' - '+s.desc;}).join('\n');
   var entry=plants.find(function(p){return p.name.toLowerCase().indexOf(q.toLowerCase())>=0;});
   var ctx='';
   if(entry){
@@ -746,13 +746,13 @@ function getCare(){
       ?'\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
       :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
   }
-  var prompt='Pflegeplan für Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+  var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
     'Antworte NUR mit JSON:\n{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"..."}\n'+
-    '2-3 Sätze je Feld auf Deutsch.';
+    '2-3 Saetze je Feld auf Deutsch.';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6':'claude-sonnet-4-20250514',max_tokens:1200,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
@@ -763,19 +763,10 @@ function getCare(){
       CARE_S.map(function(s){
         return '<div class="care-section" style="border-left-color:'+s.color+'">'+
           '<div class="care-section-label" style="color:'+s.color+'">'+s.icon+' '+s.label+'</div>'+
-          '<div class="care-section-text">'+esc(obj[s.key]||'–')+'</div>'+
+          '<div class="care-section-text">'+esc(obj[s.key]||'-')+'</div>'+
         '</div>';
       }).join('')+'</div>';
-  }).}).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
-}
-
-function showPanel(name,btn){
-  document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('on');});
-  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
-  btn.classList.add('on');
-  document.getElementById('panel-'+name).classList.add('on');
-  if(name==='berater') renderCareChips();
-  if(name==='substrate') renderSubList();
+  }).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
 }
 
 var _tt;
