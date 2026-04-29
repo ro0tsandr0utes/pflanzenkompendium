@@ -267,6 +267,132 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   display: flex; align-items: center; justify-content: center;
 }
 .setup-close:hover { background: var(--bg); color: var(--text); }
+
+.detail-card {
+  background: white; border-radius: 16px;
+  max-width: 720px; width: 100%; max-height: 90vh;
+  display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.detail-tabs {
+  display: flex; gap: 2px;
+  padding: 1rem 1.5rem 0; padding-right: 3rem;
+  border-bottom: 1px solid var(--border-l);
+  flex-shrink: 0;
+}
+.detail-tab {
+  padding: 8px 18px; border: none; background: none;
+  font-family: 'DM Sans', sans-serif; font-size: 14px;
+  color: var(--muted); cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all .15s;
+}
+.detail-tab:hover { color: var(--text); }
+.detail-tab.on { color: var(--g2); border-bottom-color: var(--g2); font-weight: 500; }
+
+.detail-body {
+  padding: 1.5rem 1.75rem 1.75rem;
+  overflow-y: auto; flex: 1;
+}
+.detail-name {
+  font-family: 'Playfair Display', serif; font-style: italic;
+  font-size: 26px; color: var(--text); line-height: 1.2; margin-bottom: 1.25rem;
+}
+.detail-section {
+  margin-bottom: 1.25rem;
+}
+.detail-label {
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: .5rem;
+}
+.detail-value {
+  font-size: 14px; color: var(--text); line-height: 1.55;
+}
+.detail-rhythm-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 13.5px; line-height: 1.6;
+  padding: 6px 0;
+}
+.detail-rhythm-row + .detail-rhythm-row {
+  border-top: 1px solid var(--border-l);
+}
+.detail-rhythm-icon { font-size: 14px; }
+.detail-rhythm-label { font-weight: 500; min-width: 80px; }
+.detail-rhythm-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+.detail-rhythm-meta.due { color: var(--g2); font-weight: 500; }
+.detail-rhythm-meta.overdue { color: var(--danger); font-weight: 500; }
+
+.detail-events-list {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: .5rem;
+}
+.detail-event-row {
+  display: flex; gap: 10px; font-size: 13px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: 6px;
+}
+.detail-event-row.active {
+  background: var(--gl);
+  border: 1px solid var(--g3);
+}
+.detail-event-date {
+  flex-shrink: 0; width: 90px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.detail-event-row.active .detail-event-date { color: var(--g1); font-weight: 500; }
+.detail-event-text { flex: 1; }
+
+.detail-fold {
+  border: 1px solid var(--border-l);
+  border-radius: 8px;
+  background: white;
+  margin-bottom: 8px;
+}
+.detail-fold summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.detail-fold summary::-webkit-details-marker { display: none; }
+.detail-fold summary:hover { background: var(--bg); }
+.detail-fold[open] summary { border-bottom: 1px solid var(--border-l); }
+.detail-fold-icon { font-size: 14px; flex-shrink: 0; }
+.detail-fold-label { flex: 1; }
+.detail-fold-meta { font-size: 11px; color: var(--muted); font-weight: 400; }
+.detail-fold-content {
+  padding: 12px 14px;
+  font-size: 13.5px; line-height: 1.6;
+  color: var(--text);
+}
+
+.detail-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-l);
+  margin-top: .5rem;
+}
+
+.repot-current {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 1rem;
+  font-size: 13px;
+}
+.repot-current-label {
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 4px;
+}
 .setup-leaf { font-size: 32px; margin-bottom: .5rem; }
 .setup-title { font-family: 'Playfair Display', serif; font-size: 22px; margin-bottom: .375rem; color: var(--text); }
 .setup-sub { font-size: 13px; color: var(--muted); margin-bottom: 1.75rem; line-height: 1.6; }
@@ -494,6 +620,36 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="setup-actions">
       <button class="btn" onclick="bulkRefreshCare()" id="bulk-btn">Alle Pflegepläne aktualisieren</button>
       <span id="bulk-status" class="setup-ok"></span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="detail-overlay" onclick="if(event.target===this)closeDetailModal()">
+  <div class="detail-card">
+    <button class="setup-close" id="detail-close" onclick="closeDetailModal()" title="Schließen">×</button>
+    <div class="detail-tabs">
+      <button class="detail-tab on" id="detail-tab-info" onclick="showDetailTab('info')">Details</button>
+      <button class="detail-tab" id="detail-tab-care" onclick="showDetailTab('care')">Pflegeplan</button>
+    </div>
+    <div class="detail-body">
+      <div id="detail-panel-info"></div>
+      <div id="detail-panel-care" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="repot-overlay" onclick="if(event.target===this)closeRepotModal()">
+  <div class="setup-card">
+    <button class="setup-close" onclick="closeRepotModal()" title="Schließen">×</button>
+    <div class="setup-leaf">🪴</div>
+    <div class="setup-title">Umtopfen</div>
+    <div class="setup-sub" id="repot-sub">Frischer Substrat-Mix für die Pflanze. Gieß- und Düngedatum werden zurückgesetzt, Pflegeplan wird neu generiert beim nächsten Aufruf.</div>
+    <div id="repot-content"></div>
+    <div class="setup-actions" style="margin-top:1rem">
+      <button class="btn primary" id="repot-save-btn" onclick="saveRepot()">Umtopfen bestätigen</button>
+      <button class="btn ghost" onclick="closeRepotModal()">Abbrechen</button>
+      <span class="form-err" id="repot-err"></span>
+      <span class="form-hint" id="repot-hint"></span>
     </div>
   </div>
 </div>
@@ -1176,24 +1332,10 @@ function renderBanner() {
   }
 
   banner.style.display = 'flex';
-  banner.innerHTML = headerHtml + eventsHtml + renderUpcomingFolded();
+  banner.innerHTML = headerHtml + eventsHtml;
 }
 
 // Aufklapper: zukuenftige Events der naechsten 12 Monate, ohne die schon-aktiven
-function renderUpcomingFolded() {
-  var upcoming = upcomingEvents(12, false); // ab morgen
-  if (!upcoming.length) return '';
-  var rows = upcoming.map(function(e){
-    return '<div class="upc-row">'+
-      '<span class="upc-date">'+esc(fmtDate(e.date))+'</span>'+
-      '<span class="upc-text"><strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+'</span>'+
-    '</div>';
-  }).join('');
-  return '<details class="upc-fold"><summary>📋 '+upcoming.length+' '+(upcoming.length===1?'Event':'Events')+' in den nächsten 12 Monaten</summary>'+
-    '<div class="upc-list">'+rows+'</div>'+
-  '</details>';
-}
-
 function toggleDueFilter() {
   dueFilterOn = !dueFilterOn;
   renderBanner();
@@ -1267,6 +1409,7 @@ function renderGrid() {
       (p.notes?'<div class="card-notes">'+esc(p.notes)+'</div>':'')+
       renderQuickActions(p)+
       '<div class="card-actions">'+
+        '<button class="act-btn" onclick="openDetailModal(\''+p.id+'\')">Details</button>'+
         '<button class="act-btn" onclick="startEdit(\''+p.id+'\')">Bearbeiten</button>'+
         '<button class="act-btn care" onclick="useCare(\''+esc(p.name)+'\')">Pflege</button>'+
         '<button class="act-btn mix-btn" onclick="startEditMix(\''+p.id+'\')">'+(hasMix?'Mix':'+ Mix')+'</button>'+
@@ -1828,6 +1971,432 @@ function bulkRefreshCare() {
   next();
 }
 
+// === Details-Modal ===
+var detailPlantId = null;
+
+function openDetailModal(id) {
+  var p = plants.find(function(x){return x.id===id;});
+  if (!p) return;
+  detailPlantId = id;
+  // Zuruecksetzen auf Info-Tab
+  document.getElementById('detail-tab-info').classList.add('on');
+  document.getElementById('detail-tab-care').classList.remove('on');
+  document.getElementById('detail-panel-info').style.display = '';
+  document.getElementById('detail-panel-care').style.display = 'none';
+  renderDetailModal();
+  document.getElementById('detail-overlay').classList.remove('hidden');
+}
+
+function closeDetailModal() {
+  document.getElementById('detail-overlay').classList.add('hidden');
+  detailPlantId = null;
+}
+
+function showDetailTab(name) {
+  document.getElementById('detail-tab-info').classList.toggle('on', name==='info');
+  document.getElementById('detail-tab-care').classList.toggle('on', name==='care');
+  document.getElementById('detail-panel-info').style.display = name==='info' ? '' : 'none';
+  document.getElementById('detail-panel-care').style.display = name==='care' ? '' : 'none';
+}
+
+function renderDetailModal() {
+  if (!detailPlantId) return;
+  var p = plants.find(function(x){return x.id===detailPlantId;});
+  if (!p) { closeDetailModal(); return; }
+  renderDetailInfo(p);
+  renderDetailCare(p);
+}
+
+function renderDetailInfo(p) {
+  var box = document.getElementById('detail-panel-info');
+  // Substrat-Mix
+  var mixHtml = renderMixBadges(p.subMix, p.subId);
+
+  // Rhythmus-Block
+  var rhythmHtml = renderRhythmBlock(p);
+
+  // Notizen
+  var notesHtml = p.notes
+    ? '<div class="detail-section"><div class="detail-label">Notizen</div><div class="detail-value">'+esc(p.notes)+'</div></div>'
+    : '';
+
+  // Saisonale Events (alle, nicht nur aktive)
+  var allEvents = parseEvents(p.seasonalEvents);
+  // Sortieren nach Datum
+  allEvents.sort(function(a,b){return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;});
+  var eventsHtml = '';
+  if (allEvents.length > 0) {
+    var thisWeekStart = lastWednesday(new Date());
+    var thisWeekEnd = nextWednesday(new Date());
+    var rows = allEvents.map(function(ev){
+      var eDate = dayStart(new Date(ev.date));
+      var isActive = daysBetween(eDate, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, eDate) > 0;
+      return '<div class="detail-event-row'+(isActive?' active':'')+'">'+
+        '<span class="detail-event-date">'+esc(fmtDate(ev.date))+'</span>'+
+        '<span class="detail-event-text">'+esc(ev.text)+'</span>'+
+      '</div>';
+    }).join('');
+    eventsHtml =
+      '<details class="detail-fold">'+
+        '<summary><span class="detail-fold-icon">🍂</span><span class="detail-fold-label">Saisonale Hinweise</span><span class="detail-fold-meta">'+allEvents.length+'</span></summary>'+
+        '<div class="detail-fold-content"><div class="detail-events-list">'+rows+'</div></div>'+
+      '</details>';
+  }
+
+  box.innerHTML =
+    '<div class="detail-name">'+esc(p.name)+'</div>'+
+    '<div class="detail-section">'+
+      '<div class="detail-label">Substrat-Mix</div>'+
+      '<div class="detail-value">'+mixHtml+'</div>'+
+    '</div>'+
+    '<div class="detail-section">'+
+      '<div class="detail-label">Pflege-Rhythmus</div>'+
+      rhythmHtml+
+    '</div>'+
+    notesHtml+
+    eventsHtml+
+    '<div class="detail-actions">'+
+      '<button class="btn sm" onclick="openRepotModal(\''+p.id+'\')">🪴 Umtopfen</button>'+
+      '<button class="btn sm" onclick="closeDetailModal();startEdit(\''+p.id+'\')">Bearbeiten</button>'+
+      '<button class="btn sm ghost" onclick="closeDetailModal();useCare(\''+esc(p.name)+'\')">Pflegeberater öffnen</button>'+
+    '</div>';
+}
+
+function renderRhythmBlock(p) {
+  function rhythmRow(type) {
+    var s = dueStatus(p, type);
+    var icon = type==='water' ? '💧' : '🌱';
+    var label = type==='water' ? 'Gießen' : 'Düngen';
+    var weeksField = type==='water' ? 'wateringIntervalWeeks' : 'fertilizingIntervalWeeks';
+    var lastField  = type==='water' ? 'lastWatered' : 'lastFertilized';
+    var weeks = parseInt(p[weeksField]);
+
+    if (!weeks || weeks <= 0) {
+      return '<div class="detail-rhythm-row">'+
+        '<span class="detail-rhythm-icon">'+icon+'</span>'+
+        '<span class="detail-rhythm-label">'+label+'</span>'+
+        '<span style="color:var(--muted)">nicht getrackt</span>'+
+      '</div>';
+    }
+
+    var lastIso = p[lastField];
+    var lastTxt = lastIso ? fmtDate(lastIso) : 'noch nie';
+    var rhythmText = 'alle '+weeks+' '+(weeks===1?'Woche':'Wochen');
+    var meta = '';
+    if (s.overdue) meta = '<span class="detail-rhythm-meta overdue">'+(s.weeksOverdue+1)+' '+(s.weeksOverdue===0?'Woche':'Wochen')+' überfällig</span>';
+    else if (s.due) meta = '<span class="detail-rhythm-meta due">heute fällig</span>';
+    else if (s.dueDate) meta = '<span class="detail-rhythm-meta">nächste: '+fmtDate(s.dueDate)+'</span>';
+
+    return '<div class="detail-rhythm-row">'+
+      '<span class="detail-rhythm-icon">'+icon+'</span>'+
+      '<span class="detail-rhythm-label">'+label+'</span>'+
+      '<span style="color:var(--muted)">'+rhythmText+', zuletzt: '+esc(lastTxt)+'</span>'+
+      meta+
+    '</div>';
+  }
+  return rhythmRow('water') + rhythmRow('fertilize');
+}
+
+function renderDetailCare(p) {
+  var box = document.getElementById('detail-panel-care');
+  if (!p.carePlan) {
+    box.innerHTML =
+      '<div class="empty" style="padding:2rem 1rem">'+
+        '<div style="margin-bottom:1rem">Noch kein Pflegeplan generiert.</div>'+
+        '<button class="btn primary" onclick="closeDetailModal();useCare(\''+esc(p.name)+'\')">Pflegeplan generieren</button>'+
+      '</div>';
+    return;
+  }
+  var obj;
+  try { obj = JSON.parse(p.carePlan); }
+  catch(e) { box.innerHTML = '<div class="empty">Pflegeplan konnte nicht gelesen werden.</div>'; return; }
+
+  var meta = '';
+  if (p.carePlanAt) {
+    var d = new Date(p.carePlanAt);
+    var dStr = d.toLocaleDateString('de-DE');
+    meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am '+esc(dStr)+'</div>';
+  }
+
+  var folds = CARE_S.map(function(s){
+    var text = obj[s.key] || '–';
+    return '<details class="detail-fold">'+
+      '<summary>'+
+        '<span class="detail-fold-icon">'+s.icon+'</span>'+
+        '<span class="detail-fold-label" style="color:'+s.color+'">'+s.label+'</span>'+
+      '</summary>'+
+      '<div class="detail-fold-content">'+esc(text)+'</div>'+
+    '</details>';
+  }).join('');
+
+  box.innerHTML = meta + folds +
+    '<div class="detail-actions">'+
+      '<button class="btn sm ghost" id="detail-refresh-btn" onclick="refreshCarePlanInModal()">↻ Neu generieren</button>'+
+    '</div>';
+}
+
+// Pflegeplan im Detail-Modal neu generieren, ohne Tab-Wechsel
+function refreshCarePlanInModal() {
+  if (!detailPlantId) return;
+  var p = plants.find(function(x){return x.id===detailPlantId;});
+  if (!p) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+  var btn = document.getElementById('detail-refresh-btn');
+  btn.disabled = true; btn.textContent = 'Generiert…';
+
+  var subTxt = activeSubs().map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
+  var mr = parseMix(p.subMix);
+  var ctx = mr.length > 0
+    ? '\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
+    : '\nSubstrat: '+(SUBS[si(p.subId)]?SUBS[si(p.subId)].name:'?')+'.';
+  var todayIso = toIsoDate(new Date());
+
+  var prompt = 'Pflegeplan fuer Zimmerpflanze: '+p.name+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+    'Heute ist der '+todayIso+'.\n\n'+
+    'Antworte NUR mit JSON:\n'+
+    '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
+    '2-3 Saetze je Pflege-Feld auf Deutsch.';
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { toast('Antwort konnte nicht verarbeitet werden.'); btn.disabled=false; btn.textContent='↻ Neu generieren'; return; }
+
+    var planJson = JSON.stringify(obj);
+    var nowIso = new Date().toISOString();
+    p.carePlan = planJson;
+    p.carePlanAt = nowIso;
+    apiFetch({action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso}).catch(function(){
+      toast('Pflegeplan konnte nicht gespeichert werden');
+    });
+    toast('Pflegeplan aktualisiert');
+    renderDetailCare(p);
+  }).catch(function(err){
+    toast('API-Fehler: '+(err.message||'Unbekannt'));
+    btn.disabled = false; btn.textContent = '↻ Neu generieren';
+  });
+}
+
+// === Umtopf-Modal ===
+var repotPlantId = null;
+var repotMixRows = [];
+
+function openRepotModal(id) {
+  var p = plants.find(function(x){return x.id===id;});
+  if (!p) return;
+  repotPlantId = id;
+  repotMixRows = [];
+  document.getElementById('repot-err').textContent = '';
+  document.getElementById('repot-hint').textContent = '';
+  document.getElementById('repot-save-btn').disabled = false;
+  document.getElementById('repot-save-btn').textContent = 'Umtopfen bestätigen';
+  renderRepotModal(p);
+  document.getElementById('repot-overlay').classList.remove('hidden');
+  // KI-Vorschlag automatisch holen
+  fetchRepotSuggestion(p);
+}
+
+function closeRepotModal() {
+  document.getElementById('repot-overlay').classList.add('hidden');
+  repotPlantId = null;
+  repotMixRows = [];
+}
+
+function renderRepotModal(p) {
+  var box = document.getElementById('repot-content');
+  // Aktueller Mix als Lese-Anzeige
+  var currentMix = renderMixBadges(p.subMix, p.subId);
+  // Neuer Mix als editierbarer Builder
+  var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
+  var rowsHtml = repotMixRows.map(function(r,i) {
+    var idx = si(r.subId), col = subColor(idx);
+    var nm = idx >= 0 ? SUBS[idx].name.split('(')[0].trim() : r.subId;
+    return '<div class="mix-row">'+
+      '<div class="mix-row-dot" style="background:'+col+'"></div>'+
+      '<div class="mix-row-name">'+esc(nm)+'</div>'+
+      '<input class="mix-row-pct" type="number" min="0" max="100" value="'+r.pct+'" oninput="repotUpdatePct('+i+',this.value)" />'+
+      '<button class="mix-row-del" onclick="repotDelRow('+i+')" title="Entfernen">x</button>'+
+    '</div>';
+  }).join('');
+  var used = {};
+  repotMixRows.forEach(function(r){used[r.subId]=true;});
+  var addOpts = activeSubs().filter(function(s){return !used[s.id];}).map(function(s) {
+    return '<option value="'+s.id+'">'+s.name.split('(')[0].trim()+'</option>';
+  }).join('');
+
+  var totalCls, totalColor;
+  if (sum === 100) { totalCls = 'var(--g3)'; totalColor = 'var(--g2)'; }
+  else if (sum > 100) { totalCls = 'var(--danger)'; totalColor = 'var(--danger)'; }
+  else { totalCls = 'var(--amber)'; totalColor = 'var(--amber)'; }
+
+  box.innerHTML =
+    '<div class="repot-current">'+
+      '<div class="repot-current-label">Aktueller Mix</div>'+
+      currentMix+
+    '</div>'+
+    '<div class="mix-builder">'+
+      '<div class="mix-builder-title">'+
+        '<span>Neuer Mix</span>'+
+        '<span class="mix-builder-hint">Anteile in % — Summe muss 100 ergeben</span>'+
+      '</div>'+
+      '<div class="mix-rows">'+rowsHtml+'</div>'+
+      (repotMixRows.length > 0 ?
+        '<div class="mix-total" style="display:flex">'+
+          '<div class="mix-total-bar"><div class="mix-total-fill" style="width:'+Math.min(sum,100)+'%;background:'+totalCls+'"></div></div>'+
+          '<span class="mix-total-label" style="color:'+totalColor+'">'+sum+'%</span>'+
+        '</div>'
+      : '')+
+      '<div class="mix-add-row">'+
+        '<select class="mix-add-sel" id="repot-add-sel">'+addOpts+'</select>'+
+        '<button class="mix-add-btn" onclick="repotAddRow()">+ Hinzufügen</button>'+
+      '</div>'+
+      '<button class="mix-ai-btn" id="repot-ai-btn" onclick="fetchRepotSuggestion()">✦ KI-Mischung neu vorschlagen</button>'+
+    '</div>';
+}
+
+function repotAddRow() {
+  var id = document.getElementById('repot-add-sel').value;
+  if (!id) return;
+  var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
+  repotMixRows.push({subId:id, pct:Math.max(0, 100-sum)});
+  var p = plants.find(function(x){return x.id===repotPlantId;});
+  renderRepotModal(p);
+}
+function repotDelRow(i) {
+  repotMixRows.splice(i,1);
+  var p = plants.find(function(x){return x.id===repotPlantId;});
+  renderRepotModal(p);
+}
+function repotUpdatePct(i, val) {
+  repotMixRows[i].pct = parseInt(val) || 0;
+  // Nicht komplett re-rendern -> Fokus bliebe weg. Nur Total + Bar updaten.
+  var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
+  var bar = document.querySelector('#repot-content .mix-total-fill');
+  var label = document.querySelector('#repot-content .mix-total-label');
+  if (bar && label) {
+    bar.style.width = Math.min(sum,100)+'%';
+    if (sum === 100) { bar.style.background='var(--g3)'; label.style.color='var(--g2)'; }
+    else if (sum > 100) { bar.style.background='var(--danger)'; label.style.color='var(--danger)'; }
+    else { bar.style.background='var(--amber)'; label.style.color='var(--amber)'; }
+    label.textContent = sum+'%';
+  }
+}
+
+function fetchRepotSuggestion(p) {
+  if (!repotPlantId) return;
+  if (!p) p = plants.find(function(x){return x.id===repotPlantId;});
+  if (!p) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+  var btn = document.getElementById('repot-ai-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Berechnet…'; }
+  var avail = activeSubs();
+  var subList = avail.map(function(s){return s.id+': '+s.name+(s.leer?' [Restbestand - bevorzugen, kann aber knapp sein]':'')+' - '+s.desc;}).join('\n');
+  var ids = avail.map(function(s){return s.id;}).join(',');
+  var prompt = 'Du bist Zimmerpflanzen-Substrat-Experte. Frischer Substratmix beim Umtopfen fuer: '+p.name+'\n\n'+
+    'Verfuegbare Produkte (NUR diese):\n'+subList+'\n\n'+
+    'Regeln: Nur IDs aus dieser Liste ('+ids+'). Anteile = exakt 100. 1-4 Komponenten.\n'+
+    'Wenn ein Produkt als Restbestand markiert ist, BEVORZUGE es. Falls Restbestand mengenmaessig knapp wird, mit aktivem Produkt aehnlicher Eigenschaft mischen.\n'+
+    'Faustregeln: Kakteen/Sukkulenten mineralisch-dominant. Epiphyten rindenbasiert. Aroids erdig + Mineralien. Gruenpflanzen Erde-Basis.\n'+
+    'Antworte NUR mit JSON: {"mix":[{"id":"s1","pct":40},{"id":"s6","pct":60}],"reason":"Begruendung Deutsch"}';
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,system:'Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data) {
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { toast('KI-Antwort Fehler.'); if(btn){btn.disabled=false; btn.textContent='✦ KI-Mischung neu vorschlagen';} return; }
+    if (obj.mix && Array.isArray(obj.mix)) {
+      repotMixRows = obj.mix.filter(function(m){return SUBS.some(function(s){return s.id===m.id;});}).map(function(m){return {subId:m.id, pct:m.pct};});
+      var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
+      if (sum !== 100 && sum > 0 && repotMixRows.length) repotMixRows[repotMixRows.length-1].pct += (100-sum);
+      renderRepotModal(p);
+      if (obj.reason) toast(obj.reason);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '✦ KI-Mischung neu vorschlagen'; }
+  }).catch(function(err){
+    toast('Fehler '+(err.message||'unbekannt'));
+    if (btn) { btn.disabled = false; btn.textContent = '✦ KI-Mischung neu vorschlagen'; }
+  });
+}
+
+function saveRepot() {
+  if (!repotPlantId) return;
+  var p = plants.find(function(x){return x.id===repotPlantId;});
+  if (!p) return;
+  var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
+  if (repotMixRows.length === 0 || sum !== 100) {
+    document.getElementById('repot-err').textContent = 'Mix muss 100% ergeben (aktuell: '+sum+'%).';
+    return;
+  }
+  var newMix = serializeMix(repotMixRows);
+  // Primaeres Substrat = groesster Anteil
+  var primary = repotMixRows.slice().sort(function(a,b){return b.pct-a.pct;})[0].subId;
+
+  document.getElementById('repot-err').textContent = '';
+  document.getElementById('repot-hint').textContent = 'Speichert…';
+  document.getElementById('repot-save-btn').disabled = true;
+
+  // Vorherige Werte fuer Rollback
+  var prev = {
+    subMix: p.subMix, subId: p.subId,
+    lastWatered: p.lastWatered, lastFertilized: p.lastFertilized,
+    carePlan: p.carePlan, carePlanAt: p.carePlanAt
+  };
+  // Optimistisches Update
+  p.subMix = newMix;
+  p.subId = primary;
+  p.lastWatered = '';
+  p.lastFertilized = '';
+  p.carePlan = '';
+  p.carePlanAt = '';
+
+  apiFetch({
+    action:'update', id:p.id,
+    subMix:newMix, subId:primary,
+    lastWatered:'', lastFertilized:'',
+    carePlan:'', carePlanAt:''
+  }).then(function(res){
+    if (!res.ok) {
+      // Rollback
+      p.subMix=prev.subMix; p.subId=prev.subId;
+      p.lastWatered=prev.lastWatered; p.lastFertilized=prev.lastFertilized;
+      p.carePlan=prev.carePlan; p.carePlanAt=prev.carePlanAt;
+      document.getElementById('repot-hint').textContent = '';
+      document.getElementById('repot-err').textContent = 'Fehler: '+(res.error||'?');
+      document.getElementById('repot-save-btn').disabled = false;
+      return;
+    }
+    toast('Umgetopft - Pflege-Daten zurückgesetzt');
+    closeRepotModal();
+    // Detail-Modal neu rendern
+    renderDetailModal();
+    // Sammlung re-rendern (Mix, Faelligkeits-Badges aendern sich)
+    renderBanner();
+    renderNextEventTeaser();
+    renderGrid();
+    renderCalendarPanel();
+  }).catch(function(){
+    p.subMix=prev.subMix; p.subId=prev.subId;
+    p.lastWatered=prev.lastWatered; p.lastFertilized=prev.lastFertilized;
+    p.carePlan=prev.carePlan; p.carePlanAt=prev.carePlanAt;
+    document.getElementById('repot-hint').textContent = '';
+    document.getElementById('repot-err').textContent = 'Verbindungsfehler';
+    document.getElementById('repot-save-btn').disabled = false;
+  });
+}
+
 function showPanel(name,btn){
   document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('on');});
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
@@ -1853,7 +2422,14 @@ function toast(msg){
     init();
   }
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') closeSettings();
+    if (e.key === 'Escape') {
+      // Reihenfolge: zuerst innen liegende Modals
+      var repot = document.getElementById('repot-overlay');
+      var detail = document.getElementById('detail-overlay');
+      if (repot && !repot.classList.contains('hidden')) { closeRepotModal(); return; }
+      if (detail && !detail.classList.contains('hidden')) { closeDetailModal(); return; }
+      closeSettings();
+    }
   });
 })();
 </script>
