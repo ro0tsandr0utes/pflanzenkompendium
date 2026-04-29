@@ -278,14 +278,27 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   border-radius: var(--r);
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
-  display: flex; align-items: center; gap: 12px;
+  display: flex; flex-direction: column; gap: 10px;
   font-size: 14px; line-height: 1.5;
 }
 .care-banner.today { background: var(--gl); border: 1px solid var(--g3); color: var(--g1); }
 .care-banner.soon  { background: white; border: 1px solid var(--border); color: var(--text); }
+.care-banner-row { display: flex; align-items: center; gap: 12px; }
 .care-banner-icon { font-size: 22px; flex-shrink: 0; }
 .care-banner-text { flex: 1; }
 .care-banner-text strong { font-weight: 500; }
+
+.care-events {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 8px; border-top: 1px solid var(--border-l);
+}
+.care-banner.today .care-events { border-top-color: rgba(58,107,26,.2); }
+.care-event {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; line-height: 1.5;
+}
+.care-event-text { flex: 1; }
+.care-event::before { content: '🍂'; flex-shrink: 0; font-size: 14px; line-height: 1.4; }
 
 .btn.on { background: var(--g2); color: white; border-color: var(--g2); }
 
@@ -348,6 +361,15 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="setup-actions">
       <button class="btn" onclick="seedPlants()" id="seed-btn">32 Pflanzen importieren</button>
       <span id="seed-status" class="setup-ok"></span>
+    </div>
+    <hr class="setup-divider" />
+    <div class="setup-section-label">Wartung: Pflegepläne neu generieren</div>
+    <div class="setup-hint" style="margin-bottom:.875rem">
+      Holt für alle Pflanzen einen frischen Pflegeplan von der KI. Bestehende Intervall- und Event-Einstellungen werden NICHT überschrieben - nur leere Felder werden neu gefüllt. Dauer ca. 20-30 Sekunden, ca. 22 Cent API-Kosten.
+    </div>
+    <div class="setup-actions">
+      <button class="btn" onclick="bulkRefreshCare()" id="bulk-btn">Alle Pflegepläne aktualisieren</button>
+      <span id="bulk-status" class="setup-ok"></span>
     </div>
   </div>
 </div>
@@ -523,6 +545,37 @@ function fmtDate(d) {
 }
 function isCareDay() {
   return new Date().getDay() === WEDNESDAY;
+}
+
+// === Saisonale Events ===
+// Format im Sheet: "YYYY-MM-DD:Text|YYYY-MM-DD:Text"
+// Trennzeichen | zwischen Events, : nach dem Datum (erstes :, der Rest gehoert zum Text).
+function parseEvents(str) {
+  if (!str || !str.trim()) return [];
+  return str.split('|').map(function(chunk) {
+    chunk = chunk.trim();
+    var idx = chunk.indexOf(':');
+    if (idx < 0) return null;
+    var date = chunk.substring(0, idx).trim();
+    var text = chunk.substring(idx + 1).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !text) return null;
+    return {date: date, text: text};
+  }).filter(function(e){return e;});
+}
+function serializeEvents(events) {
+  return events.map(function(e){return e.date+':'+e.text;}).join('|');
+}
+// Aktiv = Eventdatum liegt im aktuellen Pflegefenster
+// (letzter Mittwoch <= Eventdatum < naechster Mittwoch)
+function isEventActive(ev) {
+  var eDate = dayStart(new Date(ev.date));
+  var winStart = lastWednesday(new Date());
+  var winEnd = nextWednesday(new Date());
+  return daysBetween(eDate, winStart) >= 0 && daysBetween(winEnd, eDate) > 0;
+}
+function plusOneYear(isoDate) {
+  var parts = isoDate.split('-');
+  return (parseInt(parts[0]) + 1) + '-' + parts[1] + '-' + parts[2];
 }
 
 // Faelligkeit fuer eine Pflanze + Aktionstyp ('water' | 'fertilize')
@@ -740,11 +793,36 @@ function countDue() {
   return n;
 }
 
+function activeEvents() {
+  // Liefert flache Liste {plantId, plantName, date, text} fuer alle aktiven Events
+  var out = [];
+  plants.forEach(function(p) {
+    var evs = parseEvents(p.seasonalEvents);
+    evs.forEach(function(ev) {
+      if (isEventActive(ev)) {
+        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text});
+      }
+    });
+  });
+  return out;
+}
+
+function renderEventsBlock(events) {
+  if (!events.length) return '';
+  return '<div class="care-events">'+events.map(function(e) {
+    return '<div class="care-event">'+
+      '<div class="care-event-text">'+
+        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+
+      '</div>'+
+      '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓ Erledigt</button>'+
+    '</div>';
+  }).join('')+'</div>';
+}
+
 function renderBanner() {
   var banner = document.getElementById('care-banner');
   var toggle = document.getElementById('due-toggle');
   var dueCount = countDue();
-  // Toggle nur sichtbar wenn ueberhaupt etwas getrackt wird
   var anyTracked = plants.some(function(p){
     return dueStatus(p,'water').tracked || dueStatus(p,'fertilize').tracked;
   });
@@ -752,45 +830,65 @@ function renderBanner() {
   toggle.textContent = dueFilterOn ? 'Nur fällige ✓' : 'Nur fällige';
   toggle.classList.toggle('on', dueFilterOn);
 
-  if (!anyTracked) { banner.style.display='none'; return; }
+  var events = activeEvents();
+  var eventsHtml = renderEventsBlock(events);
+  var hasEvents = events.length > 0;
 
-  if (isCareDay()) {
-    banner.className = 'care-banner today';
-    banner.style.display = 'flex';
-    if (dueCount > 0) {
-      banner.innerHTML =
-        '<div class="care-banner-icon">🌿</div>'+
-        '<div class="care-banner-text"><strong>Heute ist Pflegetag.</strong> '+
-        dueCount+' '+(dueCount===1?'Pflanze':'Pflanzen')+' '+(dueCount===1?'ist':'sind')+' fällig.</div>';
+  // Wenn weder Tracking aktiv noch Events da -> Banner aus
+  if (!anyTracked && !hasEvents) { banner.style.display='none'; return; }
+
+  var headerHtml = '';
+  if (anyTracked) {
+    if (isCareDay()) {
+      banner.className = 'care-banner today';
+      if (dueCount > 0) {
+        headerHtml =
+          '<div class="care-banner-row">'+
+            '<div class="care-banner-icon">🌿</div>'+
+            '<div class="care-banner-text"><strong>Heute ist Pflegetag.</strong> '+
+            dueCount+' '+(dueCount===1?'Pflanze':'Pflanzen')+' '+(dueCount===1?'ist':'sind')+' fällig.</div>'+
+          '</div>';
+      } else {
+        headerHtml =
+          '<div class="care-banner-row">'+
+            '<div class="care-banner-icon">✓</div>'+
+            '<div class="care-banner-text"><strong>Heute ist Pflegetag</strong> — aktuell ist nichts fällig.</div>'+
+          '</div>';
+      }
     } else {
-      banner.innerHTML =
-        '<div class="care-banner-icon">✓</div>'+
-        '<div class="care-banner-text"><strong>Heute ist Pflegetag</strong> — aktuell ist nichts fällig.</div>';
-    }
-  } else {
-    var next = nextWednesday(new Date());
-    // Wieviele werden NAECHSTEN Mittwoch faellig sein? Berechnen wir live.
-    var nextDueCount = 0;
-    plants.forEach(function(p){
-      ['water','fertilize'].forEach(function(t){
-        var s = dueStatus(p, t);
-        if (!s.tracked) return;
-        if (s.due) { nextDueCount++; return; }
-        // nicht heute faellig: ist nextDue == naechster Mittwoch?
-        if (s.dueDate && daysBetween(s.dueDate, next) === 0) nextDueCount++;
+      var next = nextWednesday(new Date());
+      var nextDueCount = 0;
+      plants.forEach(function(p){
+        ['water','fertilize'].forEach(function(t){
+          var s = dueStatus(p, t);
+          if (!s.tracked) return;
+          if (s.due) { nextDueCount++; return; }
+          if (s.dueDate && daysBetween(s.dueDate, next) === 0) nextDueCount++;
+        });
       });
-    });
-    if (dueCount === 0 && nextDueCount === 0) { banner.style.display='none'; return; }
+      if (dueCount === 0 && nextDueCount === 0) {
+        // kein Pflegetag-Header, nur evtl. Events
+        banner.className = 'care-banner soon';
+      } else {
+        banner.className = 'care-banner soon';
+        var parts = [];
+        if (dueCount > 0) parts.push('<strong>'+dueCount+' überfällig.</strong>');
+        parts.push('Nächster Pflegetag: '+fmtDate(next)+'.');
+        if (nextDueCount > 0) parts.push(nextDueCount+' '+(nextDueCount===1?'Aktion':'Aktionen')+' werden fällig.');
+        headerHtml =
+          '<div class="care-banner-row">'+
+            '<div class="care-banner-icon">📅</div>'+
+            '<div class="care-banner-text">'+parts.join(' ')+'</div>'+
+          '</div>';
+      }
+    }
+  } else if (hasEvents) {
+    // Nur Events, kein Tracking -> neutraler Container-Style
     banner.className = 'care-banner soon';
-    banner.style.display = 'flex';
-    var parts = [];
-    if (dueCount > 0) parts.push('<strong>'+dueCount+' überfällig.</strong>');
-    parts.push('Nächster Pflegetag: '+fmtDate(next)+'.');
-    if (nextDueCount > 0) parts.push(nextDueCount+' '+(nextDueCount===1?'Aktion':'Aktionen')+' werden fällig.');
-    banner.innerHTML =
-      '<div class="care-banner-icon">📅</div>'+
-      '<div class="care-banner-text">'+parts.join(' ')+'</div>';
   }
+
+  banner.style.display = 'flex';
+  banner.innerHTML = headerHtml + eventsHtml;
 }
 
 function toggleDueFilter() {
@@ -900,6 +998,36 @@ function markCare(id, type) {
   }).catch(function(){
     p[field] = prev;
     toast('Verbindungsfehler');
+  });
+}
+
+// Saisonales Event als erledigt markieren -> Datum +1 Jahr
+function markEventDone(plantId, eventDate) {
+  var p = plants.find(function(x){return x.id===plantId;});
+  if (!p) return;
+  var events = parseEvents(p.seasonalEvents);
+  var idx = -1;
+  for (var i = 0; i < events.length; i++) {
+    if (events[i].date === eventDate) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  var prev = p.seasonalEvents;
+  events[idx].date = plusOneYear(events[idx].date);
+  var newStr = serializeEvents(events);
+  p.seasonalEvents = newStr;
+  apiFetch({action:'update', id:plantId, seasonalEvents:newStr}).then(function(res){
+    if (!res.ok) {
+      p.seasonalEvents = prev;
+      toast('Fehler: '+(res.error||'?'));
+      renderBanner();
+      return;
+    }
+    toast('Event auf nächstes Jahr verschoben');
+    renderBanner();
+  }).catch(function(){
+    p.seasonalEvents = prev;
+    toast('Verbindungsfehler');
+    renderBanner();
   });
 }
 
@@ -1101,18 +1229,25 @@ function getCare(forceRefresh){
       ?'\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
       :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
   }
+  var todayIso = toIsoDate(new Date());
   var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+    'Heute ist der '+todayIso+'.\n\n'+
     'Antworte NUR mit JSON:\n'+
     '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
-    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N}\n'+
+    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
     '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
     'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
     'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
-    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte.';
+    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte. '+
+    'seasonalEvents: 0-4 saisonale Pflege-Erinnerungen pro Jahr fuer diese Pflanze. '+
+    'Datumsangaben muessen in der Zukunft liegen ('+todayIso+' oder spaeter, im laufenden oder folgenden Jahr). '+
+    'text kurz und konkret ("Winterruhe einleiten - kuehl stellen, gießen halbieren"). '+
+    'Nur Events nennen die fuer DIESE Pflanze typisch sind - leeres Array wenn nichts saisonales relevant ist.';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1300,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
@@ -1140,10 +1275,25 @@ function getCare(forceRefresh){
         payload.fertilizingIntervalWeeks = String(fSugg);
       }
 
+      // Saisonale Events nur uebernehmen wenn noch keine gesetzt sind
+      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
+        var validEvents = obj.seasonalEvents.filter(function(e){
+          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+        }).map(function(e){
+          // Pipe und Doppelpunkt im Text neutralisieren, sonst zerlegt parseEvents falsch
+          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
+        });
+        if (validEvents.length > 0) {
+          var serialized = serializeEvents(validEvents);
+          entry.seasonalEvents = serialized;
+          payload.seasonalEvents = serialized;
+        }
+      }
+
       apiFetch(payload).catch(function(){ toast('Pflegeplan konnte nicht gespeichert werden'); });
       renderCarePlan(entry.name, obj, {cachedAt: nowIso, canRefresh: true});
-      // Falls Intervalle gesetzt wurden, Sammlung re-rendern damit Badges erscheinen
-      if (payload.wateringIntervalWeeks || payload.fertilizingIntervalWeeks !== undefined) {
+      // Falls Intervalle oder Events gesetzt wurden, Sammlung re-rendern damit Badges/Banner erscheinen
+      if (payload.wateringIntervalWeeks || payload.fertilizingIntervalWeeks !== undefined || payload.seasonalEvents) {
         renderBanner();
         renderGrid();
       }
@@ -1151,6 +1301,107 @@ function getCare(forceRefresh){
       renderCarePlan(q, obj, {canRefresh: false});
     }
   }).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
+}
+
+// === Temporäre Wartung: Bulk-Refresh aller Pflegepläne ===
+// Kann entfernt werden sobald nicht mehr gebraucht. Aufruf nur aus Setup-Karte.
+function bulkRefreshCare() {
+  if (!cfg.url || !cfg.key) {
+    document.getElementById('bulk-status').textContent = 'URL und API Key müssen gesetzt sein.';
+    return;
+  }
+  if (!plants.length) {
+    document.getElementById('bulk-status').textContent = 'Keine Pflanzen geladen.';
+    return;
+  }
+  var btn = document.getElementById('bulk-btn');
+  var st = document.getElementById('bulk-status');
+  if (!confirm('Pflegepläne für ' + plants.length + ' Pflanzen neu generieren? Dauert ca. ' + Math.ceil(plants.length * 0.8) + ' Sekunden.')) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Läuft…';
+  var ok = 0, fail = 0;
+  var i = 0;
+  var subTxt = SUBS.map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (fast leer)':'')+' - '+s.desc;}).join('\n');
+  var todayIso = toIsoDate(new Date());
+
+  function next() {
+    if (i >= plants.length) {
+      btn.disabled = false;
+      btn.textContent = 'Alle Pflegepläne aktualisieren';
+      st.textContent = 'Fertig: ' + ok + ' erfolgreich, ' + fail + ' fehlgeschlagen.';
+      renderAll();
+      return;
+    }
+    var entry = plants[i];
+    st.textContent = 'Pflanze ' + (i+1) + ' von ' + plants.length + ': ' + entry.name + '…';
+
+    var mr = parseMix(entry.subMix);
+    var ctx = mr.length > 0
+      ? '\nAktueller Mix: '+mr.map(function(r){var idx=si(r.subId);return r.pct+'% '+(idx>=0?SUBS[idx].name:r.subId);}).join(', ')+'.'
+      : '\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
+
+    var prompt = 'Pflegeplan fuer Zimmerpflanze: '+entry.name+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+      'Heute ist der '+todayIso+'.\n\n'+
+      'Antworte NUR mit JSON:\n'+
+      '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+      '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+      '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
+      '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
+      'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa. '+
+      'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks 2-8 oder 0 wenn nicht zu duengen. '+
+      'seasonalEvents: 0-4 saisonale Erinnerungen, Datum >= '+todayIso+', text kurz und konkret. '+
+      'Leeres Array wenn nichts saisonales relevant.';
+
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(data){
+      var raw = data.content && data.content.find(function(b){return b.type==='text';});
+      raw = raw ? raw.text : '{}';
+      var obj;
+      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+      catch(e) { fail++; i++; setTimeout(next, 600); return; }
+
+      var planJson = JSON.stringify(obj);
+      var nowIso = new Date().toISOString();
+      entry.carePlan = planJson;
+      entry.carePlanAt = nowIso;
+      var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
+
+      var wSugg = parseInt(obj.wateringIntervalWeeks);
+      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
+      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
+        entry.wateringIntervalWeeks = String(wSugg);
+        payload.wateringIntervalWeeks = String(wSugg);
+      }
+      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
+        entry.fertilizingIntervalWeeks = String(fSugg);
+        payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
+        var validEvents = obj.seasonalEvents.filter(function(e){
+          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+        }).map(function(e){
+          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
+        });
+        if (validEvents.length > 0) {
+          var serialized = serializeEvents(validEvents);
+          entry.seasonalEvents = serialized;
+          payload.seasonalEvents = serialized;
+        }
+      }
+
+      apiFetch(payload).then(function(){ ok++; }).catch(function(){ fail++; }).then(function(){
+        i++; setTimeout(next, 600);
+      });
+    }).catch(function(){
+      fail++; i++; setTimeout(next, 600);
+    });
+  }
+  next();
 }
 
 function showPanel(name,btn){
