@@ -274,6 +274,42 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 
+.care-banner {
+  border-radius: var(--r);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 14px; line-height: 1.5;
+}
+.care-banner.today { background: var(--gl); border: 1px solid var(--g3); color: var(--g1); }
+.care-banner.soon  { background: white; border: 1px solid var(--border); color: var(--text); }
+.care-banner-icon { font-size: 22px; flex-shrink: 0; }
+.care-banner-text { flex: 1; }
+.care-banner-text strong { font-weight: 500; }
+
+.btn.on { background: var(--g2); color: white; border-color: var(--g2); }
+
+.due-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.due-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 20px;
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1.7;
+  border: 1px solid;
+}
+.due-badge.due-today  { background: var(--gl); color: var(--g1); border-color: var(--g3); font-weight: 500; }
+.due-badge.overdue    { background: var(--danger-l); color: var(--danger); border-color: var(--danger); font-weight: 500; }
+.due-badge.upcoming   { background: var(--bg); color: var(--muted); border-color: var(--border); }
+
+.quick-actions { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+.quick-btn {
+  font-size: 11px; padding: 3px 9px;
+  border: 1px solid var(--g3); border-radius: 6px;
+  cursor: pointer; background: var(--gl); color: var(--g1); font-family: inherit;
+  transition: all .15s;
+}
+.quick-btn:hover { background: var(--g2); color: white; }
+.quick-btn.fert  { border-color: var(--amber); background: var(--amber-l); color: var(--amber); }
+.quick-btn.fert:hover { background: var(--amber); color: white; }
+
 .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 14px; }
 .spinner {
   display: inline-block; width: 20px; height: 20px;
@@ -332,9 +368,11 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 <main class="main">
 
   <div id="panel-sammlung" class="panel on">
+    <div id="care-banner" class="care-banner" style="display:none"></div>
     <div class="toolbar">
       <input class="search" id="srch" placeholder="Pflanze suchen…" oninput="renderGrid()" />
       <select class="fsel" id="fsub" onchange="renderGrid()"><option value="">Alle Substrate</option></select>
+      <button class="btn" id="due-toggle" onclick="toggleDueFilter()" style="display:none">Nur fällige</button>
       <button class="btn primary" onclick="openAddForm()">+ Pflanze</button>
     </div>
 
@@ -354,6 +392,19 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
         <div class="form-group">
           <label class="form-label">Notizen</label>
           <input class="form-input" id="f-notes" placeholder="Standort, Herkunft, Besonderheiten…" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group" style="max-width:200px">
+          <label class="form-label">Gießen alle … Wochen</label>
+          <input class="form-input" id="f-water-weeks" type="number" min="1" max="52" placeholder="z.B. 1" />
+        </div>
+        <div class="form-group" style="max-width:200px">
+          <label class="form-label">Düngen alle … Wochen</label>
+          <input class="form-input" id="f-fert-weeks" type="number" min="1" max="52" placeholder="z.B. 4" />
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <span style="font-size:11px;color:var(--muted);line-height:1.5">Leer lassen wenn nicht getrackt werden soll</span>
         </div>
       </div>
       <div class="mix-builder">
@@ -426,7 +477,85 @@ var CARE_S = [
   {key:'fehler',       label:'Häufige Fehler',  color:'#B71C1C', icon:'⚠️'}
 ];
 
-var plants = [], editId = null, cfg = {}, mixRows = [];
+var plants = [], editId = null, cfg = {}, mixRows = [], dueFilterOn = false;
+
+// === Datums-Helpers (Pflegetag = Mittwoch) ===
+var WEDNESDAY = 3; // 0=So, 1=Mo, 2=Di, 3=Mi
+
+function dayStart(d) {
+  var x = new Date(d);
+  x.setHours(0,0,0,0);
+  return x;
+}
+function daysBetween(a, b) {
+  return Math.round((dayStart(a) - dayStart(b)) / 86400000);
+}
+// Letzter Mittwoch <= heute (heute selbst, falls heute Mi)
+function lastWednesday(from) {
+  var d = dayStart(from || new Date());
+  var diff = (d.getDay() - WEDNESDAY + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+// Naechster Mittwoch > heute (immer in der Zukunft)
+function nextWednesday(from) {
+  var d = dayStart(from || new Date());
+  var diff = (WEDNESDAY - d.getDay() + 7) % 7;
+  if (diff === 0) diff = 7;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+// Snap auf naeheren Mittwoch. Bei Gleichstand (Sa) -> letzter Mittwoch.
+function snapToWednesday(from) {
+  var d = dayStart(from || new Date());
+  var prev = lastWednesday(d);
+  var next = nextWednesday(d);
+  return (daysBetween(d, prev) <= daysBetween(next, d)) ? prev : next;
+}
+function toIsoDate(d) {
+  var x = dayStart(d);
+  var m = String(x.getMonth()+1); if (m.length<2) m='0'+m;
+  var dd = String(x.getDate()); if (dd.length<2) dd='0'+dd;
+  return x.getFullYear()+'-'+m+'-'+dd;
+}
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'short'});
+}
+function isCareDay() {
+  return new Date().getDay() === WEDNESDAY;
+}
+
+// Faelligkeit fuer eine Pflanze + Aktionstyp ('water' | 'fertilize')
+// Rueckgabe: {tracked, due, overdue, dueDate, weeksOverdue}
+// tracked=false bedeutet: kein Intervall gesetzt -> nicht teilnehmend
+function dueStatus(plant, type) {
+  var lastField = type === 'water' ? 'lastWatered' : 'lastFertilized';
+  var intField  = type === 'water' ? 'wateringIntervalWeeks' : 'fertilizingIntervalWeeks';
+  var weeks = parseInt(plant[intField]);
+  if (!weeks || weeks <= 0) return {tracked:false, due:false, overdue:false, dueDate:null, weeksOverdue:0};
+
+  var thisCareDay = lastWednesday(new Date());
+  var lastIso = plant[lastField];
+  if (!lastIso) {
+    return {tracked:true, due:true, overdue:false, dueDate:thisCareDay, weeksOverdue:0};
+  }
+  var last = dayStart(new Date(lastIso));
+  var nextDue = new Date(last);
+  nextDue.setDate(nextDue.getDate() + weeks * 7);
+  nextDue = snapToWednesday(nextDue);
+
+  var diffDays = daysBetween(thisCareDay, nextDue);
+  if (diffDays >= 0) {
+    return {
+      tracked: true,
+      due: true,
+      overdue: diffDays >= 7,
+      dueDate: nextDue,
+      weeksOverdue: Math.floor(diffDays / 7)
+    };
+  }
+  return {tracked:true, due:false, overdue:false, dueDate:nextDue, weeksOverdue:0};
+}
 
 function loadCfg() {
   try { cfg.url = localStorage.getItem('pfk_url')||''; cfg.key = localStorage.getItem('pfk_key')||''; } catch(e){}
@@ -596,23 +725,146 @@ function mixAiSuggest() {
 }
 
 function renderAll() {
+  renderBanner();
   renderGrid(); renderSubSelects(); renderCareChips();
   document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
+}
+
+function countDue() {
+  var n = 0;
+  plants.forEach(function(p) {
+    var w = dueStatus(p, 'water');
+    var f = dueStatus(p, 'fertilize');
+    if (w.due || f.due) n++;
+  });
+  return n;
+}
+
+function renderBanner() {
+  var banner = document.getElementById('care-banner');
+  var toggle = document.getElementById('due-toggle');
+  var dueCount = countDue();
+  // Toggle nur sichtbar wenn ueberhaupt etwas getrackt wird
+  var anyTracked = plants.some(function(p){
+    return dueStatus(p,'water').tracked || dueStatus(p,'fertilize').tracked;
+  });
+  toggle.style.display = anyTracked ? '' : 'none';
+  toggle.textContent = dueFilterOn ? 'Nur fällige ✓' : 'Nur fällige';
+  toggle.classList.toggle('on', dueFilterOn);
+
+  if (!anyTracked) { banner.style.display='none'; return; }
+
+  if (isCareDay()) {
+    banner.className = 'care-banner today';
+    banner.style.display = 'flex';
+    if (dueCount > 0) {
+      banner.innerHTML =
+        '<div class="care-banner-icon">🌿</div>'+
+        '<div class="care-banner-text"><strong>Heute ist Pflegetag.</strong> '+
+        dueCount+' '+(dueCount===1?'Pflanze':'Pflanzen')+' '+(dueCount===1?'ist':'sind')+' fällig.</div>';
+    } else {
+      banner.innerHTML =
+        '<div class="care-banner-icon">✓</div>'+
+        '<div class="care-banner-text"><strong>Heute ist Pflegetag</strong> — aktuell ist nichts fällig.</div>';
+    }
+  } else {
+    var next = nextWednesday(new Date());
+    // Wieviele werden NAECHSTEN Mittwoch faellig sein? Berechnen wir live.
+    var nextDueCount = 0;
+    plants.forEach(function(p){
+      ['water','fertilize'].forEach(function(t){
+        var s = dueStatus(p, t);
+        if (!s.tracked) return;
+        if (s.due) { nextDueCount++; return; }
+        // nicht heute faellig: ist nextDue == naechster Mittwoch?
+        if (s.dueDate && daysBetween(s.dueDate, next) === 0) nextDueCount++;
+      });
+    });
+    if (dueCount === 0 && nextDueCount === 0) { banner.style.display='none'; return; }
+    banner.className = 'care-banner soon';
+    banner.style.display = 'flex';
+    var parts = [];
+    if (dueCount > 0) parts.push('<strong>'+dueCount+' überfällig.</strong>');
+    parts.push('Nächster Pflegetag: '+fmtDate(next)+'.');
+    if (nextDueCount > 0) parts.push(nextDueCount+' '+(nextDueCount===1?'Aktion':'Aktionen')+' werden fällig.');
+    banner.innerHTML =
+      '<div class="care-banner-icon">📅</div>'+
+      '<div class="care-banner-text">'+parts.join(' ')+'</div>';
+  }
+}
+
+function toggleDueFilter() {
+  dueFilterOn = !dueFilterOn;
+  renderBanner();
+  renderGrid();
+}
+
+function renderDueBadges(p) {
+  var w = dueStatus(p, 'water');
+  var f = dueStatus(p, 'fertilize');
+  if (!w.tracked && !f.tracked) return '';
+  var html = '<div class="due-badges">';
+  ['water','fertilize'].forEach(function(t) {
+    var s = t==='water' ? w : f;
+    if (!s.tracked) return;
+    var icon = t==='water' ? '💧' : '🌱';
+    var label;
+    var cls;
+    if (s.overdue) {
+      cls = 'overdue';
+      label = (t==='water'?'Gießen':'Düngen')+' überfällig';
+    } else if (s.due) {
+      cls = 'due-today';
+      label = (t==='water'?'Gießen':'Düngen')+' fällig';
+    } else {
+      cls = 'upcoming';
+      label = (t==='water'?'Gießen':'Düngen')+' '+fmtDate(s.dueDate);
+    }
+    html += '<span class="due-badge '+cls+'">'+icon+' '+esc(label)+'</span>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderQuickActions(p) {
+  var w = dueStatus(p, 'water');
+  var f = dueStatus(p, 'fertilize');
+  if (!w.due && !f.due) return '';
+  var html = '<div class="quick-actions">';
+  if (w.due) html += '<button class="quick-btn" onclick="markCare(\''+p.id+'\',\'water\')">💧 Gegossen</button>';
+  if (f.due) html += '<button class="quick-btn fert" onclick="markCare(\''+p.id+'\',\'fertilize\')">🌱 Gedüngt</button>';
+  html += '</div>';
+  return html;
 }
 
 function renderGrid() {
   var q=(document.getElementById('srch').value||'').toLowerCase();
   var fid=document.getElementById('fsub').value;
-  var vis=plants.filter(function(p){return (!q||p.name.toLowerCase().indexOf(q)>=0)&&(!fid||p.subId===fid);});
+  var vis=plants.filter(function(p){
+    if (q && p.name.toLowerCase().indexOf(q)<0) return false;
+    if (fid && p.subId!==fid) return false;
+    if (dueFilterOn) {
+      var w = dueStatus(p,'water'), f = dueStatus(p,'fertilize');
+      if (!w.due && !f.due) return false;
+    }
+    return true;
+  });
   var grid=document.getElementById('grid'), empty=document.getElementById('grid-empty');
-  if (!vis.length){grid.innerHTML='';empty.style.display='block';return;}
+  if (!vis.length){
+    grid.innerHTML='';
+    empty.style.display='block';
+    empty.textContent = dueFilterOn ? 'Keine fälligen Pflanzen.' : 'Keine Pflanzen gefunden.';
+    return;
+  }
   empty.style.display='none';
   grid.innerHTML=vis.map(function(p) {
     var hasMix=p.subMix&&p.subMix.trim();
     return '<div class="card">'+
       '<div class="card-name">'+esc(p.name)+'</div>'+
       renderMixBadges(p.subMix,p.subId)+
+      renderDueBadges(p)+
       (p.notes?'<div class="card-notes">'+esc(p.notes)+'</div>':'')+
+      renderQuickActions(p)+
       '<div class="card-actions">'+
         '<button class="act-btn" onclick="startEdit(\''+p.id+'\')">Bearbeiten</button>'+
         '<button class="act-btn care" onclick="useCare(\''+esc(p.name)+'\')">Pflege</button>'+
@@ -621,6 +873,34 @@ function renderGrid() {
       '</div>'+
     '</div>';
   }).join('');
+}
+
+// Quick-Action: Pflanze als gegossen/geduengt markieren
+function markCare(id, type) {
+  var p = plants.find(function(x){return x.id===id;});
+  if (!p) return;
+  var snap = snapToWednesday(new Date());
+  var iso = toIsoDate(snap);
+  var field = type==='water' ? 'lastWatered' : 'lastFertilized';
+  var prev = p[field];
+  p[field] = iso;
+  var payload = {action:'update', id:id};
+  payload[field] = iso;
+  apiFetch(payload).then(function(res){
+    if (!res.ok) {
+      p[field] = prev;
+      toast('Fehler: '+(res.error||'?'));
+      return;
+    }
+    var label = type==='water' ? 'Gegossen' : 'Gedüngt';
+    var snapped = daysBetween(snap, dayStart(new Date())) !== 0;
+    toast(label + (snapped ? ' (auf '+fmtDate(snap)+' gerundet)' : ''));
+    renderBanner();
+    renderGrid();
+  }).catch(function(){
+    p[field] = prev;
+    toast('Verbindungsfehler');
+  });
 }
 
 function renderSubSelects() {
@@ -661,6 +941,8 @@ function openAddForm() {
   document.getElementById('f-name').value='';
   document.getElementById('f-sub').value='s5';
   document.getElementById('f-notes').value='';
+  document.getElementById('f-water-weeks').value='';
+  document.getElementById('f-fert-weeks').value='';
   document.getElementById('f-err').textContent='';
   document.getElementById('f-hint').textContent='';
   document.getElementById('form-title').textContent='Pflanze hinzufügen';
@@ -675,6 +957,8 @@ function startEdit(id) {
   document.getElementById('f-name').value=p.name;
   document.getElementById('f-sub').value=p.subId;
   document.getElementById('f-notes').value=p.notes||'';
+  document.getElementById('f-water-weeks').value=p.wateringIntervalWeeks||'';
+  document.getElementById('f-fert-weeks').value=p.fertilizingIntervalWeeks||'';
   document.getElementById('f-err').textContent='';
   document.getElementById('f-hint').textContent='';
   document.getElementById('form-title').textContent='Pflanze bearbeiten';
@@ -692,20 +976,52 @@ function saveForm() {
   var name=document.getElementById('f-name').value.trim();
   var subId=document.getElementById('f-sub').value;
   var notes=document.getElementById('f-notes').value.trim();
+  var wWeeks=document.getElementById('f-water-weeks').value.trim();
+  var fWeeks=document.getElementById('f-fert-weeks').value.trim();
   if (!name){document.getElementById('f-err').textContent='Name fehlt';return;}
   var sum=mixRows.reduce(function(a,r){return a+r.pct;},0);
   if (mixRows.length>0&&sum!==100){document.getElementById('f-err').textContent='Mix ergibt '+sum+'% - muss 100% sein.';return;}
   var subMix=serializeMix(mixRows);
   var isEdit=!!editId, id=editId||uid();
+
+  // Cache-Invalidierung: bei Substrat-Aenderung carePlan leeren
+  var invalidate = false;
+  if (isEdit) {
+    var prev = plants.find(function(x){return x.id===id;});
+    if (prev && (prev.subId !== subId || (prev.subMix||'') !== subMix)) invalidate = true;
+  }
+
   document.getElementById('f-hint').textContent='Speichert…';
   document.getElementById('f-err').textContent='';
-  apiFetch({action:isEdit?'update':'add',id:id,name:name,subId:subId,subMix:subMix,notes:notes}).then(function(res){
+  var payload = {
+    action: isEdit?'update':'add',
+    id: id, name: name, subId: subId, subMix: subMix, notes: notes,
+    wateringIntervalWeeks: wWeeks,
+    fertilizingIntervalWeeks: fWeeks
+  };
+  if (invalidate) { payload.carePlan = ''; payload.carePlanAt = ''; }
+
+  apiFetch(payload).then(function(res){
     if (res.ok) {
-      if (isEdit){var p=plants.find(function(x){return x.id===id;});if(p){p.name=name;p.subId=subId;p.subMix=subMix;p.notes=notes;}}
-      else{plants.push({id:id,name:name,subId:subId,subMix:subMix,notes:notes});}
+      if (isEdit){
+        var p=plants.find(function(x){return x.id===id;});
+        if(p){
+          p.name=name; p.subId=subId; p.subMix=subMix; p.notes=notes;
+          p.wateringIntervalWeeks=wWeeks;
+          p.fertilizingIntervalWeeks=fWeeks;
+          if (invalidate) { p.carePlan=''; p.carePlanAt=''; }
+        }
+      } else {
+        plants.push({
+          id:id, name:name, subId:subId, subMix:subMix, notes:notes,
+          wateringIntervalWeeks:wWeeks, fertilizingIntervalWeeks:fWeeks,
+          lastWatered:'', lastFertilized:'',
+          carePlan:'', carePlanAt:''
+        });
+      }
       editId=null; mixRows=[];
       document.getElementById('form-panel').style.display='none';
-      toast(isEdit?'Aktualisiert':'Hinzugefügt');
+      toast(isEdit ? (invalidate ? 'Aktualisiert (Pflegeplan zurückgesetzt)' : 'Aktualisiert') : 'Hinzugefügt');
       renderAll();
     } else {
       document.getElementById('f-hint').textContent='';
@@ -733,12 +1049,51 @@ function useCare(name){
   getCare();
 }
 
-function getCare(){
+function renderCarePlan(plantName, obj, opts){
+  opts = opts || {};
+  var box = document.getElementById('care-result');
+  var meta = '';
+  if (opts.cachedAt) {
+    var d = new Date(opts.cachedAt);
+    var dStr = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
+    meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am ' + esc(dStr) + '</div>';
+  }
+  var refreshBtn = '';
+  if (opts.canRefresh) {
+    refreshBtn = '<button class="btn sm ghost" onclick="getCare(true)" style="margin-left:auto">↻ Neu generieren</button>';
+  }
+  box.innerHTML =
+    '<div style="display:flex;align-items:flex-start;gap:1rem;margin-bottom:.5rem">'+
+      '<div class="care-plant-name" style="margin-bottom:0;flex:1">'+esc(plantName)+'</div>'+
+      refreshBtn +
+    '</div>'+
+    meta +
+    '<div class="care-grid">'+
+      CARE_S.map(function(s){
+        return '<div class="care-section" style="border-left-color:'+s.color+'">'+
+          '<div class="care-section-label" style="color:'+s.color+'">'+s.icon+' '+s.label+'</div>'+
+          '<div class="care-section-text">'+esc(obj[s.key]||'-')+'</div>'+
+        '</div>';
+      }).join('')+
+    '</div>';
+}
+
+function getCare(forceRefresh){
   var q=document.getElementById('care-q').value.trim(); if(!q) return;
   var box=document.getElementById('care-result');
+  var entry=plants.find(function(p){return p.name.toLowerCase().indexOf(q.toLowerCase())>=0;});
+
+  // Cache-Hit: Pflanze in Sammlung + carePlan vorhanden + nicht geforced
+  if (!forceRefresh && entry && entry.carePlan) {
+    try {
+      var cached = JSON.parse(entry.carePlan);
+      renderCarePlan(entry.name, cached, {cachedAt: entry.carePlanAt, canRefresh: true});
+      return;
+    } catch(e){ /* fall through, neu generieren */ }
+  }
+
   box.innerHTML='<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>';
   var subTxt=SUBS.map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (fast leer)':'')+' - '+s.desc;}).join('\n');
-  var entry=plants.find(function(p){return p.name.toLowerCase().indexOf(q.toLowerCase())>=0;});
   var ctx='';
   if(entry){
     var mr=parseMix(entry.subMix);
@@ -747,25 +1102,54 @@ function getCare(){
       :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
   }
   var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
-    'Antworte NUR mit JSON:\n{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"..."}\n'+
-    '2-3 Saetze je Feld auf Deutsch.';
+    'Antworte NUR mit JSON:\n'+
+    '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N}\n'+
+    '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
+    'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
+    'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
+    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte.';
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1300,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
     var obj;
     try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
     catch(e){box.innerHTML='<div style="color:var(--danger);font-size:14px">Antwort konnte nicht verarbeitet werden.</div>';return;}
-    box.innerHTML='<div class="care-plant-name">'+esc(q)+'</div><div class="care-grid">'+
-      CARE_S.map(function(s){
-        return '<div class="care-section" style="border-left-color:'+s.color+'">'+
-          '<div class="care-section-label" style="color:'+s.color+'">'+s.icon+' '+s.label+'</div>'+
-          '<div class="care-section-text">'+esc(obj[s.key]||'-')+'</div>'+
-        '</div>';
-      }).join('')+'</div>';
+
+    // Wenn Pflanze in Sammlung: Cache ins Sheet zurueckschreiben
+    if (entry) {
+      var planJson = JSON.stringify(obj);
+      var nowIso = new Date().toISOString();
+      entry.carePlan = planJson;
+      entry.carePlanAt = nowIso;
+      var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
+
+      // Intervalle nur uebernehmen wenn noch nichts gesetzt ist - User-Werte schlagen KI-Werte
+      var wSugg = parseInt(obj.wateringIntervalWeeks);
+      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
+      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
+        entry.wateringIntervalWeeks = String(wSugg);
+        payload.wateringIntervalWeeks = String(wSugg);
+      }
+      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
+        entry.fertilizingIntervalWeeks = String(fSugg);
+        payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      apiFetch(payload).catch(function(){ toast('Pflegeplan konnte nicht gespeichert werden'); });
+      renderCarePlan(entry.name, obj, {cachedAt: nowIso, canRefresh: true});
+      // Falls Intervalle gesetzt wurden, Sammlung re-rendern damit Badges erscheinen
+      if (payload.wateringIntervalWeeks || payload.fertilizingIntervalWeeks !== undefined) {
+        renderBanner();
+        renderGrid();
+      }
+    } else {
+      renderCarePlan(q, obj, {canRefresh: false});
+    }
   }).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
 }
 
