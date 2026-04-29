@@ -299,6 +299,96 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .care-event-text { flex: 1; }
 .care-event::before { content: '🍂'; flex-shrink: 0; font-size: 14px; line-height: 1.4; }
+.care-event-date {
+  display: inline-block;
+  background: rgba(0,0,0,.06);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.care-banner.today .care-event-date { background: rgba(36,61,16,.12); }
+
+.upc-fold {
+  margin-top: 4px;
+  border-top: 1px solid var(--border-l);
+  padding-top: 8px;
+  font-size: 13px;
+}
+.care-banner.today .upc-fold { border-top-color: rgba(58,107,26,.2); }
+.upc-fold summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+}
+.upc-fold summary::-webkit-details-marker { display: none; }
+.upc-fold summary:hover { color: var(--text); }
+.upc-fold[open] summary { color: var(--text); margin-bottom: 6px; }
+.upc-list { display: flex; flex-direction: column; gap: 5px; padding-left: 4px; }
+.upc-row { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.45; }
+.upc-date {
+  flex-shrink: 0;
+  width: 90px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.upc-text { flex: 1; }
+.upc-text strong { font-weight: 500; }
+
+.next-event-teaser {
+  display: flex; align-items: center; gap: 10px;
+  background: white;
+  border: 1px solid var(--border-l);
+  border-radius: var(--r);
+  padding: 8px 14px;
+  margin-bottom: 1rem;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.next-event-icon { font-size: 16px; flex-shrink: 0; }
+.next-event-text { flex: 1; }
+.next-event-text strong { font-weight: 500; }
+
+.cal-month { margin-bottom: 1.75rem; }
+.cal-month-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--g1);
+  margin-bottom: .75rem;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-l);
+}
+.cal-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-l);
+  border-radius: 8px;
+  background: white;
+  margin-bottom: 6px;
+}
+.cal-row.active {
+  background: var(--gl);
+  border-color: var(--g3);
+}
+.cal-day {
+  flex-shrink: 0;
+  width: 80px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.cal-row.active .cal-day { color: var(--g1); font-weight: 500; }
+.cal-text { flex: 1; font-size: 13.5px; line-height: 1.5; }
+.cal-text strong { font-weight: 500; }
+.cal-event-text { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.cal-row.active .cal-event-text { color: var(--g1); }
 
 .btn.on { background: var(--g2); color: white; border-color: var(--g2); }
 
@@ -381,6 +471,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   <div class="nav-tabs">
     <button class="nav-tab on" onclick="showPanel('sammlung', this)">Sammlung</button>
     <button class="nav-tab"    onclick="showPanel('berater',  this)">Pflegeberater</button>
+    <button class="nav-tab"    onclick="showPanel('kalender', this)">Kalender</button>
     <button class="nav-tab"    onclick="showPanel('substrate',this)">Substrate</button>
   </div>
   <span class="nav-count" id="nav-count"></span>
@@ -453,6 +544,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       </div>
     </div>
 
+    <div id="next-event-teaser" class="next-event-teaser" style="display:none"></div>
+
     <div id="grid" class="grid"></div>
     <div id="grid-empty" class="empty" style="display:none">Keine Pflanzen gefunden.</div>
     <div id="grid-loading" class="empty"><div class="spinner"></div><br>Lädt…</div>
@@ -467,6 +560,11 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="care-result" id="care-result">
       <div class="care-placeholder">Wähle eine Pflanze aus deiner Sammlung oder gib einen Namen ein.</div>
     </div>
+  </div>
+
+  <div id="panel-kalender" class="panel">
+    <div id="cal-content"></div>
+    <div id="cal-empty" class="empty" style="display:none">Keine anstehenden Events. Trage saisonale Hinweise pro Pflanze über den Pflegeberater oder direkt im Sheet ein.</div>
   </div>
 
   <div id="panel-substrate" class="panel">
@@ -779,8 +877,75 @@ function mixAiSuggest() {
 
 function renderAll() {
   renderBanner();
+  renderNextEventTeaser();
   renderGrid(); renderSubSelects(); renderCareChips();
+  renderCalendarPanel();
   document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
+}
+
+function renderCalendarPanel() {
+  var box = document.getElementById('cal-content');
+  var empty = document.getElementById('cal-empty');
+  var events = upcomingEvents(12, true); // inkl. aktive
+  if (!events.length) { box.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  // Gruppieren nach Jahr-Monat
+  var groups = {};
+  var monthOrder = [];
+  var monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  events.forEach(function(e){
+    var key = e.dateObj.getFullYear() + '-' + (e.dateObj.getMonth()+1);
+    if (!groups[key]) {
+      groups[key] = {label: monthNames[e.dateObj.getMonth()] + ' ' + e.dateObj.getFullYear(), items: []};
+      monthOrder.push(key);
+    }
+    groups[key].items.push(e);
+  });
+
+  var today = dayStart(new Date());
+  var thisWeekStart = lastWednesday(today);
+  var thisWeekEnd = nextWednesday(today);
+
+  box.innerHTML = monthOrder.map(function(key){
+    var g = groups[key];
+    var rows = g.items.map(function(e){
+      var isActive = daysBetween(e.dateObj, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, e.dateObj) > 0;
+      var rowCls = isActive ? 'cal-row active' : 'cal-row';
+      var dayLabel = e.dateObj.toLocaleDateString('de-DE', {weekday:'short', day:'2-digit'});
+      return '<div class="'+rowCls+'">'+
+        '<span class="cal-day">'+esc(dayLabel)+'</span>'+
+        '<div class="cal-text">'+
+          '<strong>'+esc(e.plantName)+'</strong>'+
+          '<div class="cal-event-text">'+esc(e.text)+'</div>'+
+        '</div>'+
+        '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓</button>'+
+      '</div>';
+    }).join('');
+    return '<div class="cal-month"><h3 class="cal-month-label">'+esc(g.label)+'</h3>'+rows+'</div>';
+  }).join('');
+}
+
+function renderNextEventTeaser() {
+  var teaser = document.getElementById('next-event-teaser');
+  // Erst aktive Events ueberspringen, dann das naechste anstehende anzeigen.
+  // Wenn AKTIVE Events da sind, zeigt das Banner die schon - dann hier das naechste FOLGENDE.
+  var upcoming = upcomingEvents(12, false);
+  if (!upcoming.length) { teaser.style.display='none'; return; }
+  var e = upcoming[0];
+  var diffDays = daysBetween(e.dateObj, dayStart(new Date()));
+  var rel;
+  if (diffDays === 0) rel = 'heute';
+  else if (diffDays === 1) rel = 'morgen';
+  else if (diffDays < 7) rel = 'in '+diffDays+' Tagen';
+  else if (diffDays < 14) rel = 'nächste Woche';
+  else if (diffDays < 60) rel = 'in '+Math.round(diffDays/7)+' Wochen';
+  else rel = 'in '+Math.round(diffDays/30)+' Monaten';
+  teaser.innerHTML =
+    '<span class="next-event-icon">🔭</span>'+
+    '<span class="next-event-text">Nächstes Event '+esc(rel)+' ('+esc(fmtDate(e.date))+'): '+
+    '<strong>'+esc(e.plantName)+'</strong> — '+esc(e.text)+'</span>';
+  teaser.style.display = 'flex';
 }
 
 function countDue() {
@@ -807,11 +972,34 @@ function activeEvents() {
   return out;
 }
 
+// Alle zukuenftigen Events innerhalb der naechsten N Monate, sortiert nach Datum.
+// includeActive=true: aktive Events sind auch dabei (start = letzter Mittwoch),
+// sonst erst ab morgen.
+function upcomingEvents(months, includeActive) {
+  if (typeof months !== 'number') months = 12;
+  var start = includeActive ? lastWednesday(new Date()) : dayStart(new Date());
+  var end = new Date(start);
+  end.setMonth(end.getMonth() + months);
+  var out = [];
+  plants.forEach(function(p) {
+    var evs = parseEvents(p.seasonalEvents);
+    evs.forEach(function(ev) {
+      var eDate = dayStart(new Date(ev.date));
+      if (daysBetween(eDate, start) >= 0 && daysBetween(end, eDate) > 0) {
+        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text, dateObj: eDate});
+      }
+    });
+  });
+  out.sort(function(a,b){return a.dateObj - b.dateObj;});
+  return out;
+}
+
 function renderEventsBlock(events) {
   if (!events.length) return '';
   return '<div class="care-events">'+events.map(function(e) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
+        '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
         '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+
       '</div>'+
       '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓ Erledigt</button>'+
@@ -888,7 +1076,22 @@ function renderBanner() {
   }
 
   banner.style.display = 'flex';
-  banner.innerHTML = headerHtml + eventsHtml;
+  banner.innerHTML = headerHtml + eventsHtml + renderUpcomingFolded();
+}
+
+// Aufklapper: zukuenftige Events der naechsten 12 Monate, ohne die schon-aktiven
+function renderUpcomingFolded() {
+  var upcoming = upcomingEvents(12, false); // ab morgen
+  if (!upcoming.length) return '';
+  var rows = upcoming.map(function(e){
+    return '<div class="upc-row">'+
+      '<span class="upc-date">'+esc(fmtDate(e.date))+'</span>'+
+      '<span class="upc-text"><strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+'</span>'+
+    '</div>';
+  }).join('');
+  return '<details class="upc-fold"><summary>📋 '+upcoming.length+' '+(upcoming.length===1?'Event':'Events')+' in den nächsten 12 Monaten</summary>'+
+    '<div class="upc-list">'+rows+'</div>'+
+  '</details>';
 }
 
 function toggleDueFilter() {
@@ -1019,15 +1222,15 @@ function markEventDone(plantId, eventDate) {
     if (!res.ok) {
       p.seasonalEvents = prev;
       toast('Fehler: '+(res.error||'?'));
-      renderBanner();
+      renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
       return;
     }
     toast('Event auf nächstes Jahr verschoben');
-    renderBanner();
+    renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
   }).catch(function(){
     p.seasonalEvents = prev;
     toast('Verbindungsfehler');
-    renderBanner();
+    renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
   });
 }
 
@@ -1411,6 +1614,7 @@ function showPanel(name,btn){
   document.getElementById('panel-'+name).classList.add('on');
   if(name==='berater') renderCareChips();
   if(name==='substrate') renderSubList();
+  if(name==='kalender') renderCalendarPanel();
 }
 
 var _tt;
