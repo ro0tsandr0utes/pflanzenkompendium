@@ -660,7 +660,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   <div class="nav-logo"><span class="nav-logo-leaf">🌿</span> Pflanzenkompendium</div>
   <div class="nav-tabs">
     <button class="nav-tab on" onclick="showPanel('sammlung', this)">Sammlung</button>
-    <button class="nav-tab"    onclick="showPanel('berater',  this)">Pflegeberater</button>
+    <button class="nav-tab"    onclick="showPanel('berater',  this)">Lookup</button>
     <button class="nav-tab"    onclick="showPanel('kalender', this)">Kalender</button>
     <button class="nav-tab"    onclick="showPanel('substrate',this)">Substrate</button>
   </div>
@@ -743,18 +743,18 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 
   <div id="panel-berater" class="panel">
     <div class="care-header">
-      <input class="search" id="care-q" placeholder="Pflanzennamen eingeben…" onkeydown="if(event.key==='Enter')getCare()" style="font-size:15px;height:44px" />
-      <button class="btn primary" onclick="getCare()" style="height:44px">Pflegeplan erstellen</button>
+      <input class="search" id="care-q" placeholder="Pflanzennamen eingeben — auch für Pflanzen, die nicht in der Sammlung sind" onkeydown="if(event.key==='Enter')getCare()" style="font-size:15px;height:44px" />
+      <button class="btn primary" onclick="getCare()" style="height:44px">Pflegeplan abrufen</button>
     </div>
     <div class="care-chips" id="care-chips"></div>
     <div class="care-result" id="care-result">
-      <div class="care-placeholder">Wähle eine Pflanze aus deiner Sammlung oder gib einen Namen ein.</div>
+      <div class="care-placeholder">Schneller Pflegeplan-Lookup. Für Pflanzen aus der Sammlung steht der gespeicherte Plan auch im Details-Modal (Tab "Pflegeplan").</div>
     </div>
   </div>
 
   <div id="panel-kalender" class="panel">
     <div id="cal-content"></div>
-    <div id="cal-empty" class="empty" style="display:none">Keine anstehenden Events. Trage saisonale Hinweise pro Pflanze über den Pflegeberater oder direkt im Sheet ein.</div>
+    <div id="cal-empty" class="empty" style="display:none">Keine anstehenden Events. Trage saisonale Hinweise pro Pflanze über das Details-Modal (Pflegeplan generieren) oder direkt im Sheet ein.</div>
   </div>
 
   <div id="panel-substrate" class="panel">
@@ -1411,7 +1411,6 @@ function renderGrid() {
       '<div class="card-actions">'+
         '<button class="act-btn" onclick="openDetailModal(\''+p.id+'\')">Details</button>'+
         '<button class="act-btn" onclick="startEdit(\''+p.id+'\')">Bearbeiten</button>'+
-        '<button class="act-btn care" onclick="useCare(\''+esc(p.name)+'\')">Pflege</button>'+
         '<button class="act-btn mix-btn" onclick="startEditMix(\''+p.id+'\')">'+(hasMix?'Mix':'+ Mix')+'</button>'+
         '<button class="act-btn del" onclick="delPlant(\''+p.id+'\')">Löschen</button>'+
       '</div>'+
@@ -2058,7 +2057,6 @@ function renderDetailInfo(p) {
     '<div class="detail-actions">'+
       '<button class="btn sm" onclick="openRepotModal(\''+p.id+'\')">🪴 Umtopfen</button>'+
       '<button class="btn sm" onclick="closeDetailModal();startEdit(\''+p.id+'\')">Bearbeiten</button>'+
-      '<button class="btn sm ghost" onclick="closeDetailModal();useCare(\''+esc(p.name)+'\')">Pflegeberater öffnen</button>'+
     '</div>';
 }
 
@@ -2103,7 +2101,7 @@ function renderDetailCare(p) {
     box.innerHTML =
       '<div class="empty" style="padding:2rem 1rem">'+
         '<div style="margin-bottom:1rem">Noch kein Pflegeplan generiert.</div>'+
-        '<button class="btn primary" onclick="closeDetailModal();useCare(\''+esc(p.name)+'\')">Pflegeplan generieren</button>'+
+        '<button class="btn primary" onclick="refreshCarePlanInModal()">Pflegeplan generieren</button>'+
       '</div>';
     return;
   }
