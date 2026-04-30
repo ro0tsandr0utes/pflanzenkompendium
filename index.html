@@ -654,6 +654,22 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   </div>
 </div>
 
+<div class="overlay hidden" id="fertassign-overlay" onclick="if(event.target===this)closeFertAssignModal()">
+  <div class="setup-card" style="max-width:640px">
+    <button class="setup-close" onclick="closeFertAssignModal()" title="Schließen">×</button>
+    <div class="setup-leaf">🧪</div>
+    <div class="setup-title" id="fertassign-title">Dünger zuordnen</div>
+    <div class="setup-sub" id="fertassign-sub">Die KI hat passende Pflanzen vorgeschlagen. Wähle aus, welche aktualisiert werden sollen. Nicht-gedüngte Pflanzen (Düngeintervall = 0) werden automatisch ausgeschlossen.</div>
+    <div id="fertassign-content"></div>
+    <div class="setup-actions" style="margin-top:1rem">
+      <button class="btn primary" id="fertassign-save-btn" onclick="saveFertAssign()">Zuordnung bestätigen</button>
+      <button class="btn ghost" onclick="closeFertAssignModal()">Abbrechen</button>
+      <span class="form-err" id="fertassign-err"></span>
+      <span class="form-hint" id="fertassign-hint"></span>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
@@ -661,8 +677,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   <div class="nav-tabs">
     <button class="nav-tab on" onclick="showPanel('sammlung', this)">Sammlung</button>
     <button class="nav-tab"    onclick="showPanel('berater',  this)">Lookup</button>
-    <button class="nav-tab"    onclick="showPanel('kalender', this)">Kalender</button>
     <button class="nav-tab"    onclick="showPanel('substrate',this)">Substrate</button>
+    <button class="nav-tab"    onclick="showPanel('duenger',  this)">Dünger</button>
+    <button class="nav-tab"    onclick="showPanel('kalender', this)">Kalender</button>
   </div>
   <span class="nav-count" id="nav-count"></span>
   <button class="nav-btn" onclick="openSettings()" title="Einstellungen">⚙</button>
@@ -675,6 +692,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="toolbar">
       <input class="search" id="srch" placeholder="Pflanze suchen…" oninput="renderGrid()" />
       <select class="fsel" id="fsub" onchange="renderGrid()"><option value="">Alle Substrate</option></select>
+      <select class="fsel" id="ffert" onchange="renderGrid()"><option value="">Alle Dünger</option></select>
       <button class="btn" id="due-toggle" onclick="toggleDueFilter()" style="display:none">Nur fällige</button>
       <button class="btn primary" onclick="openAddForm()">+ Pflanze</button>
     </div>
@@ -734,8 +752,6 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       </div>
     </div>
 
-    <div id="next-event-teaser" class="next-event-teaser" style="display:none"></div>
-
     <div id="grid" class="grid"></div>
     <div id="grid-empty" class="empty" style="display:none">Keine Pflanzen gefunden.</div>
     <div id="grid-loading" class="empty"><div class="spinner"></div><br>Lädt…</div>
@@ -785,6 +801,10 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <input type="checkbox" id="sf-active" checked style="width:16px;height:16px" />
           <label for="sf-active" style="font-size:13px;cursor:pointer">Aktiv (für neue Mixes)</label>
         </div>
+        <div class="form-group" style="max-width:240px">
+          <label class="form-label" title="Wie viele Wochen das Substrat die Pflanze vorduengt. 0 = mineralisch.">Vordüngung (Wochen)</label>
+          <input class="form-input" id="sf-nutrient-weeks" type="number" min="0" max="52" step="1" value="0" />
+        </div>
       </div>
       <div class="form-actions" style="margin-top:.875rem">
         <button class="btn primary sm" onclick="saveSubForm()">Speichern</button>
@@ -797,6 +817,57 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="sub-list" id="sub-list"></div>
   </div>
 
+  <div id="panel-duenger" class="panel">
+    <div class="toolbar">
+      <span style="font-size:13px;color:var(--muted);flex:1">Dünger verwalten — beim Hinzufügen schlägt die KI passende Pflanzen vor.</span>
+      <button class="btn primary" onclick="openFertForm()">+ Dünger</button>
+    </div>
+
+    <div class="form-panel" id="fert-form-panel" style="display:none">
+      <div class="form-title" id="fert-form-title">Dünger hinzufügen</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;min-width:200px">
+          <label class="form-label">Name</label>
+          <input class="form-input" id="ff-name" placeholder="z.B. Compo Grünpflanzendünger" />
+        </div>
+        <div class="form-group" style="max-width:220px">
+          <label class="form-label">Kategorie</label>
+          <select class="form-select" id="ff-cat">
+            <option value="green">🌿 Grünpflanzen</option>
+            <option value="cacti">🌵 Kakteen/Sukkulenten</option>
+            <option value="orchid">🌸 Orchideen</option>
+            <option value="flowering">💐 Blüh</option>
+            <option value="universal">⊙ Universal</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Beschreibung</label>
+          <input class="form-input" id="ff-desc" placeholder="NPK-Werte, Dosierung, Eigenschaften…" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
+          <input type="checkbox" id="ff-leer" style="width:16px;height:16px" />
+          <label for="ff-leer" style="font-size:13px;cursor:pointer">Restbestand (fast leer)</label>
+        </div>
+        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
+          <input type="checkbox" id="ff-active" checked style="width:16px;height:16px" />
+          <label for="ff-active" style="font-size:13px;cursor:pointer">Aktiv (für Zuordnungen)</label>
+        </div>
+      </div>
+      <div class="form-actions" style="margin-top:.875rem">
+        <button class="btn primary sm" onclick="saveFertForm()">Speichern</button>
+        <button class="btn sm ghost" onclick="cancelFertForm()">Abbrechen</button>
+        <span class="form-err" id="ff-err"></span>
+        <span class="form-hint" id="ff-hint"></span>
+      </div>
+    </div>
+
+    <div class="sub-list" id="fert-list"></div>
+  </div>
+
 </main>
 
 <script>
@@ -806,6 +877,22 @@ var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAEC
 // SUBS wird beim init() vom Backend geladen (Endpoint: action=getSubs).
 // Felder: {id, name, desc, leer, active}. Sub kommt als String -> in convertSubs normalisiert.
 var SUBS = [];
+
+// FERTS wird beim init() vom Backend geladen (Endpoint: action=getFerts).
+// Felder: {id, name, desc, category, leer, active}.
+var FERTS = [];
+
+// Duenger-Kategorien mit Anzeige-Icons fuer Karten.
+// 'none' = explizit kein Duenger (z.B. fuer reine Sukkulenten-Pflege).
+var FERT_CATS = {
+  'green':      {label:'Gruenpflanzen', icon:'🌿', short:'Gruen'},
+  'cacti':      {label:'Kakteen/Sukkulenten', icon:'🌵', short:'Kakteen'},
+  'orchid':     {label:'Orchideen', icon:'🌸', short:'Orchidee'},
+  'flowering':  {label:'Blueh', icon:'💐', short:'Blueh'},
+  'universal':  {label:'Universal', icon:'⊙', short:'Universal'},
+  'none':       {label:'Kein Duenger', icon:'⊘', short:'Keiner'}
+};
+var FERT_CAT_ORDER = ['green','cacti','orchid','flowering','universal','none'];
 
 var CARE_S = [
   {key:'giessen',      label:'Gießen',         color:'#1565C0', icon:'💧'},
@@ -984,12 +1071,27 @@ function seedPlants() {
 function convertSubs(rawSubs) {
   // Backend liefert leer/active als Strings - in Booleans wandeln
   return (rawSubs || []).map(function(s) {
+    var nw = parseFloat(s.nutrientWeeks);
     return {
       id: s.id,
       name: s.name,
       desc: s.desc,
       leer: s.leer === 'true',
-      active: s.active === 'true' || s.active === '' // leer = default active
+      active: s.active === 'true' || s.active === '', // leer = default active
+      nutrientWeeks: isNaN(nw) ? 0 : nw // Wochen Vorduengung beim Umtopfen
+    };
+  });
+}
+
+function convertFerts(rawFerts) {
+  return (rawFerts || []).map(function(f) {
+    return {
+      id: f.id,
+      name: f.name,
+      desc: f.desc,
+      category: f.category || 'universal',
+      leer: f.leer === 'true',
+      active: f.active === 'true' || f.active === ''
     };
   });
 }
@@ -998,17 +1100,20 @@ function init() {
   showLoading(true);
   Promise.all([
     apiFetch({action:'getSubs'}),
+    apiFetch({action:'getFerts'}),
     apiFetch({action:'getAll'})
   ]).then(function(results) {
-    var subRes = results[0], plantRes = results[1];
+    var subRes = results[0], fertRes = results[1], plantRes = results[2];
     SUBS = subRes.ok ? convertSubs(subRes.data || []) : [];
+    FERTS = fertRes.ok ? convertFerts(fertRes.data || []) : [];
     plants = plantRes.ok ? (plantRes.data || []) : [];
     if (!subRes.ok) toast('Fehler beim Laden der Substrate: ' + (subRes.error || '?'));
+    if (!fertRes.ok) toast('Fehler beim Laden der Dünger: ' + (fertRes.error || '?'));
     if (!plantRes.ok) toast('Fehler beim Laden der Pflanzen: ' + (plantRes.error || '?'));
     showLoading(false); renderAll();
   }).catch(function() {
     toast('Verbindungsfehler - Apps Script URL prüfen');
-    SUBS = []; plants = []; showLoading(false); renderAll();
+    SUBS = []; FERTS = []; plants = []; showLoading(false); renderAll();
   });
 }
 
@@ -1028,6 +1133,55 @@ function parseMix(str) {
 }
 function serializeMix(rows) {
   return rows.filter(function(r){return r.pct>0;}).map(function(r){return r.subId+':'+r.pct;}).join(',');
+}
+
+// Gewichtetes Mittel der nutrientWeeks ueber den Mix.
+// Beispiel: 60% s5 (12W) + 40% s6 (26W) = 17,6W vorgeduengt.
+// Erwartet [{subId, pct}] - direkt aus parseMix oder repotMixRows.
+function mixWeightedNutrientWeeks(rows) {
+  if (!rows || !rows.length) return 0;
+  var total = 0, sumPct = 0;
+  rows.forEach(function(r) {
+    var i = si(r.subId);
+    if (i < 0) return;
+    var nw = SUBS[i].nutrientWeeks || 0;
+    total += nw * r.pct;
+    sumPct += r.pct;
+  });
+  if (sumPct === 0) return 0;
+  return total / sumPct; // in Wochen, kann float sein
+}
+
+// Dosis-Saisonalitaet: bestimmt ob die Pflanze in der Wachstums- oder Ruhephase ist (heute).
+// Wachstumsfenster kann ueber Jahreswechsel gehen (z.B. start=11, end=2 -> Nov-Feb).
+// Returnt 'growth' oder 'dormant'. Wenn keine Monate gesetzt sind: 'growth' (Default).
+function currentDosePhase(p) {
+  var s = parseInt(p.growthMonthStart);
+  var e = parseInt(p.growthMonthEnd);
+  if (isNaN(s) || isNaN(e) || s < 1 || s > 12 || e < 1 || e > 12) return 'growth';
+  var m = new Date().getMonth() + 1; // 1..12
+  if (s <= e) {
+    return (m >= s && m <= e) ? 'growth' : 'dormant';
+  } else {
+    // Wraparound (z.B. 11..2)
+    return (m >= s || m <= e) ? 'growth' : 'dormant';
+  }
+}
+
+// Liefert das passende Dosis-Label fuer JETZT, oder leerer String wenn nichts gesetzt.
+// Werte: voll/halb/viertel/aussetzen
+function currentDoseLabel(p) {
+  var phase = currentDosePhase(p);
+  return phase === 'growth' ? (p.fertDoseGrowth || '') : (p.fertDoseDormant || '');
+}
+
+// Kurzes Anzeige-Tag fuer Karte: gibt Emoji+Text oder leeren String zurueck.
+function doseShortLabel(dose) {
+  if (dose === 'voll') return '● voll';
+  if (dose === 'halb') return '◐ halbe Dosis';
+  if (dose === 'viertel') return '◔ Viertel-Dosis';
+  if (dose === 'aussetzen') return '○ pausieren';
+  return '';
 }
 
 function renderMixBadges(mixStr, subId) {
@@ -1128,10 +1282,10 @@ function mixAiSuggest() {
 
 function renderAll() {
   renderBanner();
-  renderNextEventTeaser();
   renderGrid(); renderSubSelects();
   renderCalendarPanel();
   renderSubList();
+  renderFertList();
   document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
 }
 
@@ -1176,28 +1330,6 @@ function renderCalendarPanel() {
     }).join('');
     return '<div class="cal-month"><h3 class="cal-month-label">'+esc(g.label)+'</h3>'+rows+'</div>';
   }).join('');
-}
-
-function renderNextEventTeaser() {
-  var teaser = document.getElementById('next-event-teaser');
-  // Erst aktive Events ueberspringen, dann das naechste anstehende anzeigen.
-  // Wenn AKTIVE Events da sind, zeigt das Banner die schon - dann hier das naechste FOLGENDE.
-  var upcoming = upcomingEvents(12, false);
-  if (!upcoming.length) { teaser.style.display='none'; return; }
-  var e = upcoming[0];
-  var diffDays = daysBetween(e.dateObj, dayStart(new Date()));
-  var rel;
-  if (diffDays === 0) rel = 'heute';
-  else if (diffDays === 1) rel = 'morgen';
-  else if (diffDays < 7) rel = 'in '+diffDays+' Tagen';
-  else if (diffDays < 14) rel = 'nächste Woche';
-  else if (diffDays < 60) rel = 'in '+Math.round(diffDays/7)+' Wochen';
-  else rel = 'in '+Math.round(diffDays/30)+' Monaten';
-  teaser.innerHTML =
-    '<span class="next-event-icon">🔭</span>'+
-    '<span class="next-event-text">Nächstes Event '+esc(rel)+' ('+esc(fmtDate(e.date))+'): '+
-    '<strong>'+esc(e.plantName)+'</strong> — '+esc(e.text)+'</span>';
-  teaser.style.display = 'flex';
 }
 
 function countDue() {
@@ -1341,10 +1473,52 @@ function toggleDueFilter() {
   renderGrid();
 }
 
+function renderFertBadge(p) {
+  // Kein Symbol bei Pflanzen die nicht geduengt werden (Intervall=0)
+  var weeks = p.fertilizingIntervalWeeks;
+  if (weeks === '0' || weeks === 0) return '';
+  // Intervall leer -> auch nichts anzeigen (unklarer Zustand)
+  if (weeks === '' || weeks == null) return '';
+  var fid = p.fertilizerId;
+  if (!fid) {
+    // Intervall > 0 aber kein Duenger zugeordnet -> Hinweis
+    return '<span class="due-badge upcoming" title="Kein Duenger zugeordnet" style="font-size:10px">❓ Dünger fehlt</span>';
+  }
+  var f = fertById(fid);
+  if (!f) {
+    // ID zeigt auf nicht-existenten Duenger (z.B. geloescht)
+    return '<span class="due-badge upcoming" title="Zugeordneter Duenger nicht gefunden" style="font-size:10px">❓ '+esc(fid)+'</span>';
+  }
+  var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+  var col = f.active ? 'var(--g2)' : 'var(--muted)';
+  var bg = f.active ? 'var(--gl)' : 'var(--bg)';
+  var fertHtml = '<span class="due-badge upcoming" title="'+esc(f.name)+(f.leer?' (Restbestand)':'')+'" '+
+    'style="background:'+bg+';color:'+col+';border-color:var(--border)">'+
+    cat.icon+' '+esc(cat.short)+
+    (f.leer?' <span style="font-size:9px;opacity:.7">⚠</span>':'')+
+  '</span>';
+
+  // Dosis-Tag dazu wenn gesetzt - kontextabhaengig je nach aktueller Phase
+  var dose = currentDoseLabel(p);
+  var doseTxt = doseShortLabel(dose);
+  if (doseTxt) {
+    var phase = currentDosePhase(p);
+    var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
+    var doseColor = (dose === 'aussetzen') ? 'var(--muted)' : (dose === 'voll' ? 'var(--g2)' : 'var(--amber)');
+    var doseBg = (dose === 'aussetzen') ? 'var(--bg)' : (dose === 'voll' ? 'var(--gl)' : 'var(--amber-l)');
+    fertHtml += '<span class="due-badge upcoming" title="Dosierung in '+phaseLabel+'" '+
+      'style="background:'+doseBg+';color:'+doseColor+';border-color:var(--border);font-size:10px">'+
+      esc(doseTxt)+
+    '</span>';
+  }
+  return fertHtml;
+}
+
 function renderDueBadges(p) {
   var w = dueStatus(p, 'water');
   var f = dueStatus(p, 'fertilize');
-  if (!w.tracked && !f.tracked) return '';
+  var fertBadge = renderFertBadge(p);
+  if (!w.tracked && !f.tracked && !fertBadge) return '';
   var html = '<div class="due-badges">';
   ['water','fertilize'].forEach(function(t) {
     var s = t==='water' ? w : f;
@@ -1364,6 +1538,7 @@ function renderDueBadges(p) {
     }
     html += '<span class="due-badge '+cls+'">'+icon+' '+esc(label)+'</span>';
   });
+  html += fertBadge;
   html += '</div>';
   return html;
 }
@@ -1382,9 +1557,20 @@ function renderQuickActions(p) {
 function renderGrid() {
   var q=(document.getElementById('srch').value||'').toLowerCase();
   var fid=document.getElementById('fsub').value;
+  var fertSelEl = document.getElementById('ffert');
+  var fertFilter = fertSelEl ? fertSelEl.value : '';
   var vis=plants.filter(function(p){
     if (q && p.name.toLowerCase().indexOf(q)<0) return false;
     if (fid && p.subId!==fid) return false;
+    if (fertFilter) {
+      // "__none__" = nur Pflanzen mit Duenge-Intervall > 0 aber ohne Duenger-Zuordnung
+      if (fertFilter === '__none__') {
+        var fw = parseInt(p.fertilizingIntervalWeeks);
+        if (!fw || fw <= 0 || p.fertilizerId) return false;
+      } else if (p.fertilizerId !== fertFilter) {
+        return false;
+      }
+    }
     if (dueFilterOn) {
       var w = dueStatus(p,'water'), f = dueStatus(p,'fertilize');
       if (!w.due && !f.due) return false;
@@ -1395,7 +1581,13 @@ function renderGrid() {
   if (!vis.length){
     grid.innerHTML='';
     empty.style.display='block';
-    empty.textContent = dueFilterOn ? 'Keine fälligen Pflanzen.' : 'Keine Pflanzen gefunden.';
+    var msg;
+    if (dueFilterOn && fertFilter) msg = 'Keine fälligen Pflanzen mit diesem Dünger.';
+    else if (dueFilterOn) msg = 'Keine fälligen Pflanzen.';
+    else if (fertFilter === '__none__') msg = 'Alle düngebedürftigen Pflanzen haben einen Dünger zugeordnet.';
+    else if (fertFilter) msg = 'Keine Pflanzen mit diesem Dünger.';
+    else msg = 'Keine Pflanzen gefunden.';
+    empty.textContent = msg;
     return;
   }
   empty.style.display='none';
@@ -1463,15 +1655,101 @@ function markEventDone(plantId, eventDate) {
     if (!res.ok) {
       p.seasonalEvents = prev;
       toast('Fehler: '+(res.error||'?'));
-      renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
+      renderBanner(); renderCalendarPanel();
       return;
     }
     toast('Event auf nächstes Jahr verschoben');
-    renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
+    renderBanner(); renderCalendarPanel();
   }).catch(function(){
     p.seasonalEvents = prev;
     toast('Verbindungsfehler');
-    renderBanner(); renderNextEventTeaser(); renderCalendarPanel();
+    renderBanner(); renderCalendarPanel();
+  });
+}
+
+// Mini-Refresh: nur den duengen-Text im gespeicherten Pflegeplan aktualisieren.
+// Wird aufgerufen wenn sich fertilizerId aendert und ein carePlan bereits existiert.
+// Ohne UI-Update - laeuft im Hintergrund. Bei Fehler bleibt der alte Text drin (kein Show-Stopper).
+function refreshFertText(plantId, onDone) {
+  var p = plants.find(function(x){return x.id===plantId;});
+  if (!p || !p.carePlan || !cfg.key) { if (onDone) onDone(false); return; }
+
+  var fert = p.fertilizerId ? fertById(p.fertilizerId) : null;
+  var cat = fert && FERT_CATS[fert.category] ? FERT_CATS[fert.category] : null;
+  var weeks = parseInt(p.fertilizingIntervalWeeks);
+  var fertLine = fert
+    ? fert.name + ' (Kategorie: ' + (cat?cat.label:fert.category) + ')' + (fert.desc?' - '+fert.desc:'')
+    : 'kein Duenger zugeordnet';
+  var rhythmLine = weeks > 0 ? 'alle ' + weeks + ' Wochen' : 'kein festes Intervall';
+
+  var prompt = 'Pflanze: ' + p.name + '\n' +
+    'Aktueller Duenger: ' + fertLine + '\n' +
+    'Duenge-Rhythmus: ' + rhythmLine + '\n\n' +
+    'Schreibe NUR den "duengen"-Abschnitt eines Pflegeplans: 2-3 Saetze auf Deutsch, konkret. ' +
+    'Wann duengen, in welcher Konzentration, worauf bei DIESEM Duenger achten, wann pausieren (Winterruhe etc.). ' +
+    'Wenn kein Duenger zugeordnet ist, beschreibe was die Pflanze allgemein braucht und dass noch kein passender Duenger ausgewaehlt wurde.\n\n' +
+    'Antworte NUR mit JSON: {"duengen":"..."}';
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:300,system:'Zimmerpflanzen-Duengerexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { if (onDone) onDone(false); return; }
+    if (!obj.duengen || typeof obj.duengen !== 'string') { if (onDone) onDone(false); return; }
+
+    // Bestehenden carePlan-JSON parsen, nur duengen ersetzen, zurueckschreiben
+    var plan;
+    try { plan = JSON.parse(p.carePlan); }
+    catch(e) { if (onDone) onDone(false); return; }
+    plan.duengen = obj.duengen;
+    var newJson = JSON.stringify(plan);
+    var nowIso = new Date().toISOString();
+    p.carePlan = newJson;
+    p.carePlanAt = nowIso;
+    apiFetch({action:'update', id:p.id, carePlan:newJson, carePlanAt:nowIso}).then(function(res){
+      if (onDone) onDone(!!(res && res.ok));
+    }).catch(function(){ if (onDone) onDone(false); });
+  }).catch(function(){ if (onDone) onDone(false); });
+}
+
+// Manuelle Duenger-Zuordnung pro Pflanze (aus Detail-Modal)
+function setPlantFert(plantId, fertId) {
+  var p = plants.find(function(x){return x.id===plantId;});
+  if (!p) return;
+  var prev = p.fertilizerId;
+  var changed = (prev || '') !== (fertId || '');
+  p.fertilizerId = fertId || '';
+  apiFetch({action:'update', id:plantId, fertilizerId:fertId || ''}).then(function(res){
+    if (!res.ok) {
+      p.fertilizerId = prev;
+      toast('Fehler: '+(res.error||'?'));
+      renderDetailModal();
+      return;
+    }
+    var f = fertId ? fertById(fertId) : null;
+    toast(f ? 'Dünger geändert: '+f.name : 'Dünger entfernt');
+    renderGrid();
+    renderFertList();
+    // Mini-Refresh des Duengen-Textes wenn carePlan existiert und sich Duenger geaendert hat
+    if (changed && p.carePlan) {
+      toast('Düngen-Text wird aktualisiert…');
+      refreshFertText(plantId, function(ok) {
+        if (ok) {
+          toast('Düngen-Text aktualisiert');
+          // Wenn das Detail-Modal noch offen ist und Pflegeplan-Tab aktiv: re-rendern
+          if (detailPlantId === plantId) renderDetailCare(p);
+        }
+      });
+    }
+  }).catch(function(){
+    p.fertilizerId = prev;
+    toast('Verbindungsfehler');
+    renderDetailModal();
   });
 }
 
@@ -1486,6 +1764,36 @@ function renderSubSelects() {
       return '<option value="'+id+'"'+(cur===id?' selected':'')+'>'+nm+' ('+cnt+')</option>';
     }).join('');
   document.getElementById('f-sub').innerHTML=activeSubs().map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
+
+  // Duenger-Filter: nur tatsaechlich verwendete Duenger anzeigen, plus "ohne Duenger" wenn relevant
+  var fertSel = document.getElementById('ffert');
+  if (fertSel) {
+    var curFert = fertSel.value;
+    var usedFertIds = [];
+    var missingFertCount = 0;
+    plants.forEach(function(p){
+      var w = parseInt(p.fertilizingIntervalWeeks);
+      if (!w || w <= 0) return; // Pflanzen ohne Duenge-Intervall ignorieren
+      if (p.fertilizerId) {
+        if (usedFertIds.indexOf(p.fertilizerId) < 0) usedFertIds.push(p.fertilizerId);
+      } else {
+        missingFertCount++;
+      }
+    });
+    var opts = '<option value="">Alle Dünger</option>';
+    usedFertIds.forEach(function(id){
+      var f = fertById(id);
+      var cnt = plants.filter(function(p){return p.fertilizerId===id;}).length;
+      var cat = f && FERT_CATS[f.category] ? FERT_CATS[f.category] : null;
+      var nm = f ? f.name.split(' ').slice(0,3).join(' ') : id;
+      var prefix = cat ? cat.icon+' ' : '';
+      opts += '<option value="'+id+'"'+(curFert===id?' selected':'')+'>'+prefix+esc(nm)+' ('+cnt+')</option>';
+    });
+    if (missingFertCount > 0) {
+      opts += '<option value="__none__"'+(curFert==='__none__'?' selected':'')+'>❓ Ohne Dünger ('+missingFertCount+')</option>';
+    }
+    fertSel.innerHTML = opts;
+  }
 }
 
 function renderSubList() {
@@ -1499,10 +1807,17 @@ function renderSubList() {
     var tags = '';
     if (s.leer) tags += ' <span class="leer-tag">Restbestand</span>';
     if (!s.active) tags += ' <span class="inactive-tag">inaktiv</span>';
+    var nw = s.nutrientWeeks || 0;
+    var nwTag = '';
+    if (nw > 0) {
+      nwTag = ' <span class="leer-tag" style="background:var(--gl);color:var(--g2)" title="Substrat enthält Nährstoffe für ca. '+nw+' Wochen">🌱 '+nw+'W vorgedüngt</span>';
+    } else {
+      nwTag = ' <span class="inactive-tag" title="Mineralisches Substrat ohne Vorduengung">mineralisch</span>';
+    }
     return '<div class="sub-item'+(s.active?'':' inactive')+'">'+
       '<div class="sub-dot" style="background:'+dotColor+'"></div>'+
       '<div style="flex:1">'+
-        '<div class="sub-name">'+esc(s.name)+tags+'</div>'+
+        '<div class="sub-name">'+esc(s.name)+tags+nwTag+'</div>'+
         '<div class="sub-desc">'+esc(s.desc)+'</div>'+
         '<div class="sub-actions">'+
           '<button class="act-btn" onclick="startEditSub(\''+s.id+'\')">Bearbeiten</button>'+
@@ -1523,6 +1838,7 @@ function openSubForm() {
   document.getElementById('sf-desc').value = '';
   document.getElementById('sf-leer').checked = false;
   document.getElementById('sf-active').checked = true;
+  document.getElementById('sf-nutrient-weeks').value = '0';
   document.getElementById('sf-err').textContent = '';
   document.getElementById('sf-hint').textContent = '';
   document.getElementById('sub-form-panel').style.display = 'block';
@@ -1538,6 +1854,7 @@ function startEditSub(id) {
   document.getElementById('sf-desc').value = s.desc || '';
   document.getElementById('sf-leer').checked = !!s.leer;
   document.getElementById('sf-active').checked = !!s.active;
+  document.getElementById('sf-nutrient-weeks').value = String(s.nutrientWeeks || 0);
   document.getElementById('sf-err').textContent = '';
   document.getElementById('sf-hint').textContent = '';
   document.getElementById('sub-form-panel').style.display = 'block';
@@ -1564,6 +1881,9 @@ function saveSubForm() {
   var desc = document.getElementById('sf-desc').value.trim();
   var leer = document.getElementById('sf-leer').checked;
   var active = document.getElementById('sf-active').checked;
+  var nwRaw = document.getElementById('sf-nutrient-weeks').value;
+  var nw = parseFloat(nwRaw);
+  if (isNaN(nw) || nw < 0) nw = 0;
   if (!name) { document.getElementById('sf-err').textContent = 'Name fehlt'; return; }
   var isEdit = !!subEditId;
   var id = subEditId || nextSubId();
@@ -1573,14 +1893,15 @@ function saveSubForm() {
     action: isEdit ? 'updateSub' : 'addSub',
     id: id, name: name, desc: desc,
     leer: leer ? 'true' : 'false',
-    active: active ? 'true' : 'false'
+    active: active ? 'true' : 'false',
+    nutrientWeeks: String(nw)
   }).then(function(res){
     if (res.ok) {
       if (isEdit) {
         var s = SUBS.find(function(x){return x.id===id;});
-        if (s) { s.name=name; s.desc=desc; s.leer=leer; s.active=active; }
+        if (s) { s.name=name; s.desc=desc; s.leer=leer; s.active=active; s.nutrientWeeks=nw; }
       } else {
-        SUBS.push({id:id, name:name, desc:desc, leer:leer, active:active});
+        SUBS.push({id:id, name:name, desc:desc, leer:leer, active:active, nutrientWeeks:nw});
       }
       subEditId = null;
       document.getElementById('sub-form-panel').style.display = 'none';
@@ -1619,6 +1940,162 @@ function toggleSubLeer(id) {
     else toast(newVal ? 'Als Restbestand markiert' : 'Als vollwertig markiert');
     renderSubList();
   }).catch(function(){ s.leer = !newVal; toast('Verbindungsfehler'); renderSubList(); });
+}
+
+// === Duenger-UI ===
+
+function activeFerts() { return FERTS.filter(function(f){return f.active;}); }
+function fertById(id) { return FERTS.find(function(f){return f.id===id;}); }
+
+function renderFertList() {
+  var box = document.getElementById('fert-list');
+  if (!FERTS.length) {
+    box.innerHTML = '<div class="empty">Noch keine Dünger angelegt. Tippe auf "+ Dünger" um den ersten anzulegen.</div>';
+    return;
+  }
+  box.innerHTML = FERTS.map(function(f) {
+    var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+    var assignedCount = plants.filter(function(p){return p.fertilizerId===f.id;}).length;
+    var tags = '';
+    if (f.leer) tags += ' <span class="leer-tag">Restbestand</span>';
+    if (!f.active) tags += ' <span class="inactive-tag">inaktiv</span>';
+    return '<div class="sub-item'+(f.active?'':' inactive')+'">'+
+      '<div class="sub-dot" style="background:transparent;font-size:18px;line-height:1;width:auto;margin-top:0">'+cat.icon+'</div>'+
+      '<div style="flex:1">'+
+        '<div class="sub-name">'+esc(f.name)+
+          ' <span style="font-size:11px;color:var(--muted);font-weight:400">· '+esc(cat.label)+' · '+assignedCount+' '+(assignedCount===1?'Pflanze':'Pflanzen')+'</span>'+
+          tags+
+        '</div>'+
+        '<div class="sub-desc">'+esc(f.desc||'')+'</div>'+
+        '<div class="sub-actions">'+
+          '<button class="act-btn" onclick="startEditFert(\''+f.id+'\')">Bearbeiten</button>'+
+          '<button class="act-btn" onclick="reassignFert(\''+f.id+'\')">KI-Zuordnung neu</button>'+
+          '<button class="act-btn" onclick="toggleFertLeer(\''+f.id+'\')">'+(f.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
+          '<button class="act-btn" onclick="toggleFertActive(\''+f.id+'\')">'+(f.active?'Deaktivieren':'Aktivieren')+'</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+var fertEditId = null;
+
+function openFertForm() {
+  fertEditId = null;
+  document.getElementById('fert-form-title').textContent = 'Dünger hinzufügen';
+  document.getElementById('ff-name').value = '';
+  document.getElementById('ff-desc').value = '';
+  document.getElementById('ff-cat').value = 'green';
+  document.getElementById('ff-leer').checked = false;
+  document.getElementById('ff-active').checked = true;
+  document.getElementById('ff-err').textContent = '';
+  document.getElementById('ff-hint').textContent = '';
+  document.getElementById('fert-form-panel').style.display = 'block';
+  document.getElementById('ff-name').focus();
+}
+
+function startEditFert(id) {
+  var f = fertById(id);
+  if (!f) return;
+  fertEditId = id;
+  document.getElementById('fert-form-title').textContent = 'Dünger bearbeiten ('+id+')';
+  document.getElementById('ff-name').value = f.name || '';
+  document.getElementById('ff-desc').value = f.desc || '';
+  document.getElementById('ff-cat').value = f.category || 'universal';
+  document.getElementById('ff-leer').checked = !!f.leer;
+  document.getElementById('ff-active').checked = !!f.active;
+  document.getElementById('ff-err').textContent = '';
+  document.getElementById('ff-hint').textContent = '';
+  document.getElementById('fert-form-panel').style.display = 'block';
+  document.getElementById('ff-name').focus();
+}
+
+function cancelFertForm() {
+  fertEditId = null;
+  document.getElementById('fert-form-panel').style.display = 'none';
+}
+
+function nextFertId() {
+  var max = 0;
+  FERTS.forEach(function(f){
+    var m = /^d(\d+)$/.exec(f.id);
+    if (m) { var n = parseInt(m[1]); if (n > max) max = n; }
+  });
+  return 'd' + (max + 1);
+}
+
+function saveFertForm() {
+  var name = document.getElementById('ff-name').value.trim();
+  var desc = document.getElementById('ff-desc').value.trim();
+  var cat = document.getElementById('ff-cat').value;
+  var leer = document.getElementById('ff-leer').checked;
+  var active = document.getElementById('ff-active').checked;
+  if (!name) { document.getElementById('ff-err').textContent = 'Name fehlt'; return; }
+  var isEdit = !!fertEditId;
+  var id = fertEditId || nextFertId();
+  document.getElementById('ff-hint').textContent = 'Speichert…';
+  document.getElementById('ff-err').textContent = '';
+  apiFetch({
+    action: isEdit ? 'updateFert' : 'addFert',
+    id: id, name: name, desc: desc, category: cat,
+    leer: leer ? 'true' : 'false',
+    active: active ? 'true' : 'false'
+  }).then(function(res){
+    if (res.ok) {
+      if (isEdit) {
+        var f = fertById(id);
+        if (f) { f.name=name; f.desc=desc; f.category=cat; f.leer=leer; f.active=active; }
+      } else {
+        FERTS.push({id:id, name:name, desc:desc, category:cat, leer:leer, active:active});
+      }
+      var wasNew = !isEdit;
+      fertEditId = null;
+      document.getElementById('fert-form-panel').style.display = 'none';
+      toast(isEdit ? 'Dünger aktualisiert' : 'Dünger hinzugefügt');
+      renderFertList();
+      // Bei neuem aktiven Duenger: KI-Zuordnung anstossen
+      if (wasNew && active) {
+        setTimeout(function(){ requestFertAssignment(id); }, 200);
+      }
+    } else {
+      document.getElementById('ff-hint').textContent = '';
+      document.getElementById('ff-err').textContent = 'Fehler: '+(res.error||'?');
+    }
+  }).catch(function(){
+    document.getElementById('ff-hint').textContent = '';
+    document.getElementById('ff-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+function reassignFert(id) {
+  var f = fertById(id);
+  if (!f) return;
+  if (!f.active) { toast('Dünger ist inaktiv. Erst aktivieren.'); return; }
+  requestFertAssignment(id);
+}
+
+function toggleFertActive(id) {
+  var f = fertById(id);
+  if (!f) return;
+  var newVal = !f.active;
+  f.active = newVal;
+  apiFetch({action:'updateFert', id:id, active:newVal?'true':'false'}).then(function(res){
+    if (!res.ok) { f.active = !newVal; toast('Fehler: '+(res.error||'?')); }
+    else toast(newVal ? 'Aktiviert' : 'Deaktiviert');
+    renderFertList();
+  }).catch(function(){ f.active = !newVal; toast('Verbindungsfehler'); renderFertList(); });
+}
+
+function toggleFertLeer(id) {
+  var f = fertById(id);
+  if (!f) return;
+  var newVal = !f.leer;
+  f.leer = newVal;
+  apiFetch({action:'updateFert', id:id, leer:newVal?'true':'false'}).then(function(res){
+    if (!res.ok) { f.leer = !newVal; toast('Fehler: '+(res.error||'?')); }
+    else toast(newVal ? 'Als Restbestand markiert' : 'Als vollwertig markiert');
+    renderFertList();
+  }).catch(function(){ f.leer = !newVal; toast('Verbindungsfehler'); renderFertList(); });
 }
 
 function showLoading(on){document.getElementById('grid-loading').style.display=on?'block':'none';}
@@ -1788,17 +2265,34 @@ function getCare(forceRefresh){
       ?'\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
       :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
   }
+  var fertTxt = '';
+  var availFerts = activeFerts();
+  if (availFerts.length > 0) {
+    fertTxt = '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+      var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+      return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+    }).join('\n');
+  }
   var todayIso = toIsoDate(new Date());
-  var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+  var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
     'Heute ist der '+todayIso+'.\n\n'+
     'Antworte NUR mit JSON:\n'+
     '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
     '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+    '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
+    '"growthMonthStart":N,"growthMonthEnd":N,'+
     '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
     '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
     'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
     'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
     'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte. '+
+    (availFerts.length>0 ? 'fertilizerId: ID eines passenden Duengers aus der Liste oben - leer lassen wenn keiner gut passt oder die Pflanze nicht geduengt werden soll. ' : '') +
+    'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstumsphase bzw. Ruhephase. '+
+    'Werte: "voll" (volle Herstellerempfehlung), "halb" (50%), "viertel" (25%), "aussetzen" (komplett pausieren). '+
+    'Bei Pflanzen ohne Duengung beide leer lassen. '+
+    'growthMonthStart/growthMonthEnd: Monate (1-12) fuer die Wachstumsphase, alles ausserhalb ist Ruhephase. '+
+    'Beispiele: tropische Aroids ohne klare Ruhe = 1 bis 12. Sukkulenten = 4 bis 9. Orchideen oft 3 bis 10. '+
     'seasonalEvents: 0-4 saisonale Pflege-Erinnerungen pro Jahr fuer diese Pflanze. '+
     'Datumsangaben muessen in der Zukunft liegen ('+todayIso+' oder spaeter, im laufenden oder folgenden Jahr). '+
     'text kurz und konkret ("Winterruhe einleiten - kuehl stellen, gießen halbieren"). '+
@@ -1832,6 +2326,33 @@ function getCare(forceRefresh){
       if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
         entry.fertilizingIntervalWeeks = String(fSugg);
         payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      // fertilizerId nur uebernehmen wenn entry-Feld leer
+      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
+        entry.fertilizerId = obj.fertilizerId;
+        payload.fertilizerId = obj.fertilizerId;
+      }
+
+      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
+      var validDoses = ['voll','halb','viertel','aussetzen'];
+      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
+        entry.fertDoseGrowth = obj.fertDoseGrowth;
+        payload.fertDoseGrowth = obj.fertDoseGrowth;
+      }
+      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
+        entry.fertDoseDormant = obj.fertDoseDormant;
+        payload.fertDoseDormant = obj.fertDoseDormant;
+      }
+      var gms = parseInt(obj.growthMonthStart);
+      var gme = parseInt(obj.growthMonthEnd);
+      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
+        entry.growthMonthStart = String(gms);
+        payload.growthMonthStart = String(gms);
+      }
+      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
+        entry.growthMonthEnd = String(gme);
+        payload.growthMonthEnd = String(gme);
       }
 
       // Saisonale Events nur uebernehmen wenn noch keine gesetzt sind
@@ -1882,6 +2403,13 @@ function bulkRefreshCare() {
   var ok = 0, fail = 0;
   var i = 0;
   var subTxt = activeSubs().map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
+  var availFerts = activeFerts();
+  var fertTxt = availFerts.length > 0
+    ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+        var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+        return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+      }).join('\n')
+    : '';
   var todayIso = toIsoDate(new Date());
 
   function next() {
@@ -1900,15 +2428,22 @@ function bulkRefreshCare() {
       ? '\nAktueller Mix: '+mr.map(function(r){var idx=si(r.subId);return r.pct+'% '+(idx>=0?SUBS[idx].name:r.subId);}).join(', ')+'.'
       : '\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
 
-    var prompt = 'Pflegeplan fuer Zimmerpflanze: '+entry.name+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+    var prompt = 'Pflegeplan fuer Zimmerpflanze: '+entry.name+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
       'Heute ist der '+todayIso+'.\n\n'+
       'Antworte NUR mit JSON:\n'+
       '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
       '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+      (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+      '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
+      '"growthMonthStart":N,"growthMonthEnd":N,'+
       '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
       '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
       'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa. '+
       'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks 2-8 oder 0 wenn nicht zu duengen. '+
+      (availFerts.length>0 ? 'fertilizerId: ID eines passenden Duengers aus der Liste oder leer wenn keiner passt. ' : '') +
+      'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstums- bzw. Ruhephase. '+
+      'Werte: "voll", "halb", "viertel", "aussetzen". Bei nicht-zu-duengenden Pflanzen leer lassen. '+
+      'growthMonthStart/growthMonthEnd: Monate (1-12) der Wachstumsphase. Tropisch ohne Ruhe = 1 bis 12, Sukkulenten = 4 bis 9, Orchideen oft 3 bis 10. '+
       'seasonalEvents: 0-4 saisonale Erinnerungen, Datum >= '+todayIso+', text kurz und konkret. '+
       'Leeres Array wenn nichts saisonales relevant.';
 
@@ -1938,6 +2473,32 @@ function bulkRefreshCare() {
       if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
         entry.fertilizingIntervalWeeks = String(fSugg);
         payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
+        entry.fertilizerId = obj.fertilizerId;
+        payload.fertilizerId = obj.fertilizerId;
+      }
+
+      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
+      var validDoses = ['voll','halb','viertel','aussetzen'];
+      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
+        entry.fertDoseGrowth = obj.fertDoseGrowth;
+        payload.fertDoseGrowth = obj.fertDoseGrowth;
+      }
+      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
+        entry.fertDoseDormant = obj.fertDoseDormant;
+        payload.fertDoseDormant = obj.fertDoseDormant;
+      }
+      var gms = parseInt(obj.growthMonthStart);
+      var gme = parseInt(obj.growthMonthEnd);
+      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
+        entry.growthMonthStart = String(gms);
+        payload.growthMonthStart = String(gms);
+      }
+      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
+        entry.growthMonthEnd = String(gme);
+        payload.growthMonthEnd = String(gme);
       }
 
       if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
@@ -2035,6 +2596,31 @@ function renderDetailInfo(p) {
       '</details>';
   }
 
+  // Duenger-Sektion: Dropdown zum manuellen Setzen
+  var fertHtml = '';
+  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
+  if (fWeeks > 0) {
+    var currentFert = p.fertilizerId ? fertById(p.fertilizerId) : null;
+    // Liste der Dropdown-Optionen: aktive Duenger plus ggf. der zugewiesene falls inaktiv
+    var optList = activeFerts().slice();
+    if (currentFert && !currentFert.active) optList.push(currentFert);
+    var fertOptions = '<option value="">– kein Dünger zugeordnet –</option>' +
+      optList.map(function(f){
+        var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+        var sel = (currentFert && currentFert.id === f.id) ? ' selected' : '';
+        var inactiveTag = f.active ? '' : ' [inaktiv]';
+        var leerTag = f.leer ? ' (Restbestand)' : '';
+        return '<option value="'+f.id+'"'+sel+'>'+cat.icon+' '+f.name+' ['+cat.label+']'+leerTag+inactiveTag+'</option>';
+      }).join('');
+    fertHtml =
+      '<div class="detail-section">'+
+        '<div class="detail-label">Dünger</div>'+
+        '<select class="form-select" onchange="setPlantFert(\''+p.id+'\',this.value)" style="width:100%;background:white">'+
+          fertOptions+
+        '</select>'+
+      '</div>';
+  }
+
   box.innerHTML =
     '<div class="detail-name">'+esc(p.name)+'</div>'+
     '<div class="detail-section">'+
@@ -2045,6 +2631,7 @@ function renderDetailInfo(p) {
       '<div class="detail-label">Pflege-Rhythmus</div>'+
       rhythmHtml+
     '</div>'+
+    fertHtml+
     notesHtml+
     eventsHtml+
     '<div class="detail-actions">'+
@@ -2109,6 +2696,33 @@ function renderDetailCare(p) {
     meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am '+esc(dStr)+'</div>';
   }
 
+  // Dosis-Info: nur wenn Pflanze geduengt wird und Dosis-Felder gesetzt sind
+  var doseInfo = '';
+  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
+  if (fWeeks > 0 && (p.fertDoseGrowth || p.fertDoseDormant)) {
+    var phase = currentDosePhase(p);
+    var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
+    var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
+    var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
+    var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
+    var monthRange = '';
+    if (p.growthMonthStart && p.growthMonthEnd) {
+      var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      var s = parseInt(p.growthMonthStart), e = parseInt(p.growthMonthEnd);
+      if (s >= 1 && s <= 12 && e >= 1 && e <= 12) {
+        monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
+      }
+    }
+    var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
+    var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
+    doseInfo =
+      '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
+        '<div style="font-weight:500;color:var(--g1);margin-bottom:4px">Aktuelle Düngung'+esc(monthRange)+'</div>'+
+        '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
+        (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
+      '</div>';
+  }
+
   var folds = CARE_S.map(function(s){
     var text = obj[s.key] || '–';
     return '<details class="detail-fold">'+
@@ -2120,7 +2734,7 @@ function renderDetailCare(p) {
     '</details>';
   }).join('');
 
-  box.innerHTML = meta + folds +
+  box.innerHTML = meta + doseInfo + folds +
     '<div class="detail-actions">'+
       '<button class="btn sm ghost" id="detail-refresh-btn" onclick="refreshCarePlanInModal()">↻ Neu generieren</button>'+
     '</div>';
@@ -2132,23 +2746,38 @@ function refreshCarePlanInModal() {
   var p = plants.find(function(x){return x.id===detailPlantId;});
   if (!p) return;
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
-  var btn = document.getElementById('detail-refresh-btn');
-  btn.disabled = true; btn.textContent = 'Generiert…';
+
+  // Panel auf Spinner-State setzen
+  var box = document.getElementById('detail-panel-care');
+  box.innerHTML =
+    '<div class="empty" style="padding:2.5rem 1rem">'+
+      '<div class="spinner"></div><br>'+
+      '<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>'+
+    '</div>';
 
   var subTxt = activeSubs().map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
   var mr = parseMix(p.subMix);
   var ctx = mr.length > 0
     ? '\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
     : '\nSubstrat: '+(SUBS[si(p.subId)]?SUBS[si(p.subId)].name:'?')+'.';
+  var availFerts = activeFerts();
+  var fertTxt = availFerts.length > 0
+    ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+        var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+        return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+      }).join('\n')
+    : '';
   var todayIso = toIsoDate(new Date());
 
-  var prompt = 'Pflegeplan fuer Zimmerpflanze: '+p.name+ctx+'\n\nProdukte:\n'+subTxt+'\n\n'+
+  var prompt = 'Pflegeplan fuer Zimmerpflanze: '+p.name+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
     'Heute ist der '+todayIso+'.\n\n'+
     'Antworte NUR mit JSON:\n'+
     '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
     '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
     '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
-    '2-3 Saetze je Pflege-Feld auf Deutsch.';
+    '2-3 Saetze je Pflege-Feld auf Deutsch.'+
+    (availFerts.length>0 ? ' fertilizerId: ID eines passenden Duengers oder leer wenn keiner passt.' : '');
 
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -2159,21 +2788,41 @@ function refreshCarePlanInModal() {
     raw = raw ? raw.text : '{}';
     var obj;
     try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { toast('Antwort konnte nicht verarbeitet werden.'); btn.disabled=false; btn.textContent='↻ Neu generieren'; return; }
+    catch(e) { showCareError('Antwort konnte nicht verarbeitet werden.'); return; }
 
     var planJson = JSON.stringify(obj);
     var nowIso = new Date().toISOString();
     p.carePlan = planJson;
     p.carePlanAt = nowIso;
-    apiFetch({action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso}).catch(function(){
+    var payload = {action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso};
+
+    // fertilizerId nur uebernehmen wenn entry-Feld leer (User-Wahl > KI)
+    var fertChanged = false;
+    if (obj.fertilizerId && !p.fertilizerId && fertById(obj.fertilizerId)) {
+      p.fertilizerId = obj.fertilizerId;
+      payload.fertilizerId = obj.fertilizerId;
+      fertChanged = true;
+    }
+
+    apiFetch(payload).catch(function(){
       toast('Pflegeplan konnte nicht gespeichert werden');
     });
     toast('Pflegeplan aktualisiert');
     renderDetailCare(p);
+    if (fertChanged) { renderGrid(); }
   }).catch(function(err){
-    toast('API-Fehler: '+(err.message||'Unbekannt'));
-    btn.disabled = false; btn.textContent = '↻ Neu generieren';
+    showCareError('API-Fehler: '+(err.message||'Unbekannt'));
   });
+}
+
+function showCareError(msg) {
+  var box = document.getElementById('detail-panel-care');
+  if (!box) return;
+  box.innerHTML =
+    '<div class="empty" style="padding:2rem 1rem">'+
+      '<div style="color:var(--danger);font-size:14px;margin-bottom:1rem">'+esc(msg)+'</div>'+
+      '<button class="btn primary" onclick="refreshCarePlanInModal()">Erneut versuchen</button>'+
+    '</div>';
 }
 
 // === Umtopf-Modal ===
@@ -2228,6 +2877,39 @@ function renderRepotModal(p) {
   else if (sum > 100) { totalCls = 'var(--danger)'; totalColor = 'var(--danger)'; }
   else { totalCls = 'var(--amber)'; totalColor = 'var(--amber)'; }
 
+  // Vorduengungs-Info berechnen
+  var nutrientWeeks = mixWeightedNutrientWeeks(repotMixRows);
+  var fertInterval = parseInt(p.fertilizingIntervalWeeks);
+  var nutrientInfoHtml = '';
+  if (sum === 100 && repotMixRows.length > 0) {
+    if (nutrientWeeks <= 0) {
+      nutrientInfoHtml =
+        '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
+          '🌱 Mineralisches Substrat - keine Vorduengung. Duengen kann nach Pflegeplan starten.'+
+        '</div>';
+    } else if (isNaN(fertInterval) || fertInterval === 0) {
+      nutrientInfoHtml =
+        '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe. Pflanze hat aber kein Duengeintervall - keine Auswirkung.'+
+        '</div>';
+    } else if (nutrientWeeks <= fertInterval) {
+      nutrientInfoHtml =
+        '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe (≤ Duengeintervall '+fertInterval+'W). Duengen startet planmaessig.'+
+        '</div>';
+    } else {
+      var pauseWeeks = nutrientWeeks - fertInterval;
+      var firstFert = new Date();
+      firstFert.setDate(firstFert.getDate() + Math.round(pauseWeeks * 7));
+      firstFert = snapToWednesday(firstFert);
+      nutrientInfoHtml =
+        '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--gl);border-radius:6px;font-size:12px;color:var(--g1);line-height:1.5;border-left:3px solid var(--g3)">'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe. '+
+          '<strong>Duengepause '+(Math.round(pauseWeeks*10)/10)+' Wochen</strong> - erste Duengung ca. '+esc(fmtDate(firstFert))+'.'+
+        '</div>';
+    }
+  }
+
   box.innerHTML =
     '<div class="repot-current">'+
       '<div class="repot-current-label">Aktueller Mix</div>'+
@@ -2245,6 +2927,7 @@ function renderRepotModal(p) {
           '<span class="mix-total-label" style="color:'+totalColor+'">'+sum+'%</span>'+
         '</div>'
       : '')+
+      nutrientInfoHtml+
       '<div class="mix-add-row">'+
         '<select class="mix-add-sel" id="repot-add-sel">'+addOpts+'</select>'+
         '<button class="mix-add-btn" onclick="repotAddRow()">+ Hinzufügen</button>'+
@@ -2335,6 +3018,22 @@ function saveRepot() {
   // Primaeres Substrat = groesster Anteil
   var primary = repotMixRows.slice().sort(function(a,b){return b.pct-a.pct;})[0].subId;
 
+  // Vorduengung berechnen: gewichtetes Mittel der nutrientWeeks im Mix.
+  // lastFertilized wird so gesetzt, dass die naechste Duengung am Ende der Vorduengphase faellt.
+  // Nur wenn Pflanze ueberhaupt geduengt wird (Intervall > 0) und Vorduengung > Intervall.
+  var nutrientWeeks = mixWeightedNutrientWeeks(repotMixRows);
+  var fertInterval = parseInt(p.fertilizingIntervalWeeks);
+  var newLastFert = ''; // default: zuruecksetzen
+  if (!isNaN(fertInterval) && fertInterval > 0 && nutrientWeeks > fertInterval) {
+    // lastFertilized rueckwaerts datieren so dass naechste Duengung in (nutrientWeeks - intervall) Wochen ist
+    var offsetDays = Math.round((nutrientWeeks - fertInterval) * 7);
+    var virtualLast = new Date();
+    virtualLast.setDate(virtualLast.getDate() + offsetDays);
+    // Auf Mittwoch snappen damit naechste Faelligkeit auf Pflegetag faellt
+    virtualLast = snapToWednesday(virtualLast);
+    newLastFert = toIsoDate(virtualLast);
+  }
+
   document.getElementById('repot-err').textContent = '';
   document.getElementById('repot-hint').textContent = 'Speichert…';
   document.getElementById('repot-save-btn').disabled = true;
@@ -2349,14 +3048,14 @@ function saveRepot() {
   p.subMix = newMix;
   p.subId = primary;
   p.lastWatered = '';
-  p.lastFertilized = '';
+  p.lastFertilized = newLastFert;
   p.carePlan = '';
   p.carePlanAt = '';
 
   apiFetch({
     action:'update', id:p.id,
     subMix:newMix, subId:primary,
-    lastWatered:'', lastFertilized:'',
+    lastWatered:'', lastFertilized:newLastFert,
     carePlan:'', carePlanAt:''
   }).then(function(res){
     if (!res.ok) {
@@ -2369,13 +3068,17 @@ function saveRepot() {
       document.getElementById('repot-save-btn').disabled = false;
       return;
     }
-    toast('Umgetopft - Pflege-Daten zurückgesetzt');
+    var msg = 'Umgetopft - Pflege-Daten zurückgesetzt';
+    if (newLastFert) {
+      var weeksFwd = Math.round((nutrientWeeks - fertInterval) * 10) / 10;
+      msg = 'Umgetopft - Düngepause ~' + weeksFwd + ' Wochen (Substrat enthält Nährstoffe)';
+    }
+    toast(msg);
     closeRepotModal();
     // Detail-Modal neu rendern
     renderDetailModal();
     // Sammlung re-rendern (Mix, Faelligkeits-Badges aendern sich)
     renderBanner();
-    renderNextEventTeaser();
     renderGrid();
     renderCalendarPanel();
   }).catch(function(){
@@ -2394,6 +3097,7 @@ function showPanel(name,btn){
   btn.classList.add('on');
   document.getElementById('panel-'+name).classList.add('on');
   if(name==='substrate') renderSubList();
+  if(name==='duenger') renderFertList();
   if(name==='kalender') renderCalendarPanel();
 }
 
@@ -2402,6 +3106,261 @@ function toast(msg){
   var el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');
   clearTimeout(_tt); _tt=setTimeout(function(){el.classList.remove('show');},2800);
+}
+
+// === Duenger Bulk-Zuordnung (KI) ===
+// Nach dem Anlegen eines Duengers oder bei manuellem "KI-Zuordnung neu":
+// alle Pflanzen an die KI schicken, sie schlaegt vor, welche der betroffenen
+// Pflanzen den Duenger zugeordnet bekommen sollten. Pflanzen mit
+// fertilizingIntervalWeeks=0 werden vorher rausgefiltert.
+var fertAssignState = null; // {fertId, suggestions: [{plantId, currentFertId, suggested, reason, selected}]}
+
+function requestFertAssignment(fertId) {
+  var f = fertById(fertId);
+  if (!f) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+
+  // Kandidaten: alle Pflanzen die geduengt werden (Intervall != 0).
+  // Pflanzen mit Intervall=0 oder leerem Intervall (= unklar) raus.
+  var candidates = plants.filter(function(p) {
+    var w = p.fertilizingIntervalWeeks;
+    if (w === '' || w == null) return false;
+    var n = parseInt(w);
+    return !isNaN(n) && n > 0;
+  });
+
+  if (!candidates.length) {
+    toast('Keine Pflanzen mit aktiven Düngeintervallen vorhanden.');
+    return;
+  }
+
+  // Modal sofort oeffnen, im Lade-State
+  fertAssignState = {fertId: fertId, suggestions: null};
+  openFertAssignModalLoading(f);
+
+  // Pflanzenliste fuer den Prompt aufbereiten
+  var plantList = candidates.map(function(p) {
+    var currentFert = p.fertilizerId ? fertById(p.fertilizerId) : null;
+    var currentLabel = currentFert ? currentFert.name + ' ['+currentFert.category+']' : 'kein Duenger';
+    return p.id + ': ' + p.name +
+      (p.notes ? ' - ' + p.notes : '') +
+      ' | aktuell: ' + currentLabel +
+      ' | Duenge-Intervall: alle ' + p.fertilizingIntervalWeeks + ' Wochen';
+  }).join('\n');
+
+  var fertList = activeFerts().map(function(x) {
+    return x.id + ': ' + x.name + ' [' + x.category + ']' + (x.leer?' [Restbestand]':'') + ' - ' + x.desc;
+  }).join('\n');
+
+  var newFertLine = f.id + ': ' + f.name + ' [' + f.category + '] - ' + (f.desc || 'keine Beschreibung');
+
+  var prompt =
+    'Du bist Zimmerpflanzen-Duenger-Experte. Ein neuer Duenger wurde angelegt:\n' +
+    newFertLine + '\n\n' +
+    'Alle aktiven Duenger im Bestand:\n' + fertList + '\n\n' +
+    'Pflanzen mit aktivem Duenge-Rhythmus:\n' + plantList + '\n\n' +
+    'Aufgabe: Fuer welche Pflanzen ist der NEUE Duenger ('+f.id+') besser geeignet als ihr aktuell zugeordneter? ' +
+    'Beruecksichtige Kategorien (green=Gruenpflanzen, cacti=Kakteen/Sukkulenten, orchid=Orchideen, flowering=Bluehpflanzen, universal=alles). ' +
+    'Schlage NUR Aenderungen vor, wo der neue Duenger eindeutig passt - Pflanzen die bereits einen passenden Duenger haben, in Ruhe lassen. ' +
+    'Pflanzen ohne aktuellen Duenger ("kein Duenger") sind primaere Kandidaten wenn die Kategorie passt.\n\n' +
+    'Antworte NUR mit JSON:\n' +
+    '{"assignments":[{"plantId":"p1","reason":"Gruenpflanze - passt zur green-Kategorie"},{"plantId":"p7","reason":"..."}]}\n' +
+    'Leeres assignments-Array wenn der Duenger fuer keine Pflanze besser passt als das aktuelle Setup.';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:2000, system:'Zimmerpflanzen-Duengerexperte. Nur valides JSON, keine Backticks.', messages:[{role:'user', content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data) {
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { showFertAssignError('KI-Antwort konnte nicht verarbeitet werden.'); return; }
+
+    if (!obj.assignments || !Array.isArray(obj.assignments) || obj.assignments.length === 0) {
+      showFertAssignEmpty(f);
+      return;
+    }
+
+    // Validierung: nur Pflanzen aus den Kandidaten
+    var candidateIds = {};
+    candidates.forEach(function(p){ candidateIds[p.id] = true; });
+    var suggestions = obj.assignments.filter(function(a){
+      return a && a.plantId && candidateIds[a.plantId];
+    }).map(function(a){
+      var p = plants.find(function(x){return x.id===a.plantId;});
+      return {
+        plantId: a.plantId,
+        plantName: p ? p.name : a.plantId,
+        currentFertId: p ? p.fertilizerId : '',
+        currentFertName: p && p.fertilizerId ? (fertById(p.fertilizerId) ? fertById(p.fertilizerId).name : p.fertilizerId) : '',
+        reason: a.reason || '',
+        selected: true // standardmaessig alle aktiviert
+      };
+    });
+
+    if (!suggestions.length) {
+      showFertAssignEmpty(f);
+      return;
+    }
+
+    fertAssignState.suggestions = suggestions;
+    renderFertAssignModal(f);
+  }).catch(function(err){
+    showFertAssignError('API-Fehler: '+(err.message||'Unbekannt'));
+  });
+}
+
+function openFertAssignModalLoading(f) {
+  var box = document.getElementById('fertassign-content');
+  document.getElementById('fertassign-title').textContent = 'Dünger zuordnen: ' + f.name;
+  box.innerHTML =
+    '<div class="empty" style="padding:2.5rem 1rem">'+
+      '<div class="spinner"></div><br>'+
+      '<span class="ldots" style="font-size:14px;color:var(--muted)">KI prüft alle Pflanzen</span>'+
+    '</div>';
+  document.getElementById('fertassign-err').textContent = '';
+  document.getElementById('fertassign-hint').textContent = '';
+  document.getElementById('fertassign-save-btn').disabled = true;
+  document.getElementById('fertassign-overlay').classList.remove('hidden');
+}
+
+function showFertAssignError(msg) {
+  var box = document.getElementById('fertassign-content');
+  if (!box) return;
+  box.innerHTML =
+    '<div class="empty" style="padding:1.5rem 1rem">'+
+      '<div style="color:var(--danger);font-size:14px">'+esc(msg)+'</div>'+
+    '</div>';
+  document.getElementById('fertassign-save-btn').disabled = true;
+}
+
+function showFertAssignEmpty(f) {
+  var box = document.getElementById('fertassign-content');
+  if (!box) return;
+  box.innerHTML =
+    '<div class="empty" style="padding:1.5rem 1rem;text-align:left">'+
+      '<div style="font-size:14px;margin-bottom:.5rem">✓ Keine Aktualisierungen nötig</div>'+
+      '<div style="font-size:13px;color:var(--muted);line-height:1.5">Die KI hat keine Pflanzen gefunden, für die "'+esc(f.name)+'" besser passt als der aktuell zugeordnete Dünger. Du kannst den Dünger trotzdem manuell zuweisen, indem du eine Pflanze öffnest und im Details-Tab das Dropdown verwendest.</div>'+
+    '</div>';
+  document.getElementById('fertassign-save-btn').style.display = 'none';
+}
+
+function closeFertAssignModal() {
+  document.getElementById('fertassign-overlay').classList.add('hidden');
+  fertAssignState = null;
+  // Save-Btn-Sichtbarkeit zuruecksetzen
+  var btn = document.getElementById('fertassign-save-btn');
+  btn.style.display = '';
+  btn.disabled = false;
+  btn.textContent = 'Zuordnung bestätigen';
+}
+
+function renderFertAssignModal(f) {
+  var box = document.getElementById('fertassign-content');
+  var s = fertAssignState;
+  if (!s || !s.suggestions) return;
+  var rows = s.suggestions.map(function(sug, i) {
+    var checked = sug.selected ? 'checked' : '';
+    var currentTxt = sug.currentFertName ? esc(sug.currentFertName) : '<span style="color:var(--muted);font-style:italic">kein Dünger</span>';
+    return '<label class="fertassign-row" style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--border-l);border-radius:8px;background:white;cursor:pointer;align-items:flex-start">'+
+      '<input type="checkbox" '+checked+' onchange="toggleFertAssign('+i+',this.checked)" style="width:16px;height:16px;margin-top:3px;flex-shrink:0" />'+
+      '<div style="flex:1">'+
+        '<div style="font-size:13.5px;font-weight:500;margin-bottom:3px">'+esc(sug.plantName)+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);line-height:1.5">'+
+          'aktuell: '+currentTxt+
+          (sug.reason ? '<br>→ '+esc(sug.reason) : '')+
+        '</div>'+
+      '</div>'+
+    '</label>';
+  }).join('');
+  var n = s.suggestions.filter(function(x){return x.selected;}).length;
+  box.innerHTML =
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:.875rem">'+
+      'KI schlägt <strong>'+s.suggestions.length+'</strong> '+(s.suggestions.length===1?'Aktualisierung':'Aktualisierungen')+' vor. '+
+      'Bestätigte Pflanzen kriegen "'+esc(f.name)+'" als neuen Dünger.'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding-right:4px">'+rows+'</div>';
+  document.getElementById('fertassign-save-btn').disabled = (n===0);
+  document.getElementById('fertassign-save-btn').textContent = n>0 ? ('Zuordnung bestätigen ('+n+')') : 'Zuordnung bestätigen';
+}
+
+function toggleFertAssign(idx, checked) {
+  if (!fertAssignState || !fertAssignState.suggestions) return;
+  fertAssignState.suggestions[idx].selected = checked;
+  var f = fertById(fertAssignState.fertId);
+  if (f) renderFertAssignModal(f);
+}
+
+function saveFertAssign() {
+  if (!fertAssignState || !fertAssignState.suggestions) return;
+  var fertId = fertAssignState.fertId;
+  var selected = fertAssignState.suggestions.filter(function(x){return x.selected;});
+  if (!selected.length) { toast('Keine Pflanzen ausgewählt.'); return; }
+
+  var btn = document.getElementById('fertassign-save-btn');
+  btn.disabled = true;
+  document.getElementById('fertassign-hint').textContent = 'Speichert ' + selected.length + ' '+(selected.length===1?'Pflanze':'Pflanzen')+'…';
+  document.getElementById('fertassign-err').textContent = '';
+
+  var ok = 0, fail = 0, i = 0;
+  var updatedPlantIds = []; // fuer Mini-Refresh nach erfolgreichem Update
+
+  function next() {
+    if (i >= selected.length) {
+      btn.disabled = false;
+      if (fail === 0) {
+        toast(ok + ' '+(ok===1?'Pflanze':'Pflanzen')+' aktualisiert');
+        closeFertAssignModal();
+      } else {
+        document.getElementById('fertassign-hint').textContent = '';
+        document.getElementById('fertassign-err').textContent = ok+' erfolgreich, '+fail+' fehlgeschlagen.';
+      }
+      renderAll();
+      // Mini-Refresh fuer alle erfolgreich aktualisierten Pflanzen mit carePlan
+      var refreshTargets = updatedPlantIds.filter(function(pid){
+        var pl = plants.find(function(x){return x.id===pid;});
+        return pl && pl.carePlan;
+      });
+      if (refreshTargets.length > 0) {
+        toast(refreshTargets.length + ' Düngen-Texte werden aktualisiert…');
+        var rDone = 0, rOk = 0, rIdx = 0;
+        function nextRefresh() {
+          if (rIdx >= refreshTargets.length) {
+            if (rOk > 0) toast(rOk + ' Düngen-'+(rOk===1?'Text':'Texte')+' aktualisiert');
+            // Falls Detail-Modal offen ist, aktuelle Pflanze re-rendern
+            if (detailPlantId) {
+              var pNow = plants.find(function(x){return x.id===detailPlantId;});
+              if (pNow) renderDetailCare(pNow);
+            }
+            return;
+          }
+          refreshFertText(refreshTargets[rIdx], function(success) {
+            if (success) rOk++;
+            rDone++; rIdx++;
+            setTimeout(nextRefresh, 200);
+          });
+        }
+        nextRefresh();
+      }
+      return;
+    }
+    var sug = selected[i];
+    var prev = plants.find(function(x){return x.id===sug.plantId;});
+    if (!prev) { i++; setTimeout(next, 0); return; }
+    var prevFertId = prev.fertilizerId;
+    prev.fertilizerId = fertId;
+    apiFetch({action:'update', id:sug.plantId, fertilizerId:fertId}).then(function(res){
+      if (res.ok) { ok++; updatedPlantIds.push(sug.plantId); }
+      else { fail++; prev.fertilizerId = prevFertId; }
+    }).catch(function(){
+      fail++; prev.fertilizerId = prevFertId;
+    }).then(function(){
+      i++; setTimeout(next, 80);
+    });
+  }
+  next();
 }
 
 (function boot(){
@@ -2414,8 +3373,10 @@ function toast(msg){
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape') {
       // Reihenfolge: zuerst innen liegende Modals
+      var fertassign = document.getElementById('fertassign-overlay');
       var repot = document.getElementById('repot-overlay');
       var detail = document.getElementById('detail-overlay');
+      if (fertassign && !fertassign.classList.contains('hidden')) { closeFertAssignModal(); return; }
       if (repot && !repot.classList.contains('hidden')) { closeRepotModal(); return; }
       if (detail && !detail.classList.contains('hidden')) { closeDetailModal(); return; }
       closeSettings();
