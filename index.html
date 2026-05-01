@@ -433,6 +433,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .zone-pill.sun-schatten { background: #ECECEC; border-color: #C8C8C8; color: #555; }
 .zone-pill.sun-wechselnd { background: #F4F0FA; border-color: #DCD0EE; color: #5A4A7A; }
 .zone-pill.irr { background: #E1F5EE; border-color: #9FE1CB; color: #0F6E56; }
+.zone-pill.water-ok   { background: #DEF0FB; border-color: #A8CCE6; color: #1F5B8A; }
+.zone-pill.water-low  { background: #FFF6E0; border-color: #F0E0A8; color: #7A5800; }
+.zone-pill.water-dry  { background: #FBE6D6; border-color: #F0C39D; color: #8A4720; }
 .zone-card-notes {
   font-size: 12px; color: var(--muted);
   line-height: 1.4;
@@ -1709,7 +1712,14 @@ function init() {
     if (!plantRes.ok) toast('Fehler beim Laden der Pflanzen: ' + (plantRes.error || '?'));
     showLoading(false); renderAll();
     // Wetter asynchron im Hintergrund laden, blockiert App-Boot nicht
-    loadWeather().then(function() { renderWeatherBanner(); });
+    loadWeather().then(function() {
+      renderWeatherBanner();
+      // Wenn Bereiche-Tab offen ist, Pillen mit Wetter-Daten neu rendern
+      var zonesPanel = document.getElementById('panel-out-bereiche');
+      if (zonesPanel && zonesPanel.classList.contains('on') && document.getElementById('zone-grid')) {
+        renderZoneGrid();
+      }
+    });
   }).catch(function() {
     toast('Verbindungsfehler - Apps Script URL prüfen');
     SUBS = []; FERTS = []; plants = []; showLoading(false); renderAll();
@@ -4105,6 +4115,7 @@ function renderZoneCard(z) {
   var irrPill = irrLabel
     ? '<span class="zone-pill irr" title="Bewaesserung">' + esc(irrLabel) + '</span>'
     : '';
+  var waterPill = renderZoneWaterPill(z);
   var notesHtml = z.notes
     ? '<div class="zone-card-notes">' + esc(z.notes) + '</div>'
     : '';
@@ -4119,10 +4130,33 @@ function renderZoneCard(z) {
     '<div class="zone-card-head">'+
       '<div class="zone-card-name">' + esc(z.name) + '</div>'+
     '</div>'+
-    '<div class="zone-card-pills">'+ catPill + orPill + sunPill + irrPill + '</div>'+
+    '<div class="zone-card-pills">'+ catPill + orPill + sunPill + irrPill + waterPill + '</div>'+
     notesHtml +
     '<div class="zone-card-meta">' + esc(meta) + '</div>'+
   '</div>';
+}
+
+// Wetter-basierte Bewaesserungs-Pille (Phase O5).
+// Liefert leeren String, wenn:
+//   - Wetter nicht geladen
+//   - Bereich braucht keine Bewaesserung (irrigationGroup === 'keine')
+function renderZoneWaterPill(z) {
+  if (!WEATHER_DATA) return '';
+  if (z.irrigationGroup === 'keine') return '';
+  var info = analyzeWeather(WEATHER_DATA);
+  var mm = info.pastRainMm;
+  var cls, label, title;
+  if (mm >= WEATHER_RAIN_ENOUGH_MM) {
+    cls = 'water-ok'; label = '🌧️ Regen ok';
+    title = 'Letzte 3 Tage ' + mm + ' mm Regen — Bewässerung nicht nötig';
+  } else if (mm >= 5) {
+    cls = 'water-low'; label = '🌧️ Regen knapp';
+    title = 'Letzte 3 Tage ' + mm + ' mm Regen — bei empfindlichen Pflanzen wässern';
+  } else {
+    cls = 'water-dry'; label = '💧 Gießen';
+    title = 'Letzte 3 Tage nur ' + mm + ' mm Regen — gießen empfohlen';
+  }
+  return '<span class="zone-pill ' + cls + '" title="' + esc(title) + '">' + label + '</span>';
 }
 
 function openZoneForm(zoneId) {
