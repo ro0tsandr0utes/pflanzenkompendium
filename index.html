@@ -455,6 +455,47 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .btn.danger:hover { background: #F5D5D5; border-color: #F5D5D5; }
 
+/* Outdoor-Karten (Phase O2) */
+.op-card-event {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 13px;
+  margin-top: .35rem;
+}
+.op-card-event-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.op-card-event-text {
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-card-event.empty { color: var(--muted); font-style: italic; font-size: 12px; }
+.op-card-zone {
+  display: inline-block;
+  font-size: 11px; font-weight: 500;
+  background: var(--gl);
+  border: 1px solid var(--g3);
+  color: var(--g1);
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-right: 4px;
+}
+.op-card-warn-pill {
+  display: inline-block;
+  font-size: 11px; font-weight: 500;
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-right: 4px;
+}
+.op-card-warn-pill.frost { background: #EEF3FB; border: 1px solid #C8D8EE; color: #2E4F84; }
+.op-card-warn-pill.invasive { background: var(--danger-l); border: 1px solid var(--danger); color: var(--danger); }
+.op-card-count {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
 .detail-fold {
   border: 1px solid var(--border-l);
   border-radius: 8px;
@@ -778,6 +819,20 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   </div>
 </div>
 
+<div class="overlay hidden" id="op-detail-overlay" onclick="if(event.target===this)closeOutdoorDetailModal()">
+  <div class="detail-card">
+    <button class="setup-close" onclick="closeOutdoorDetailModal()" title="Schließen">×</button>
+    <div class="detail-tabs">
+      <button class="detail-tab on" id="op-detail-tab-info" onclick="showOutdoorDetailTab('info')">Details</button>
+      <button class="detail-tab" id="op-detail-tab-care" onclick="showOutdoorDetailTab('care')">Pflegeplan</button>
+    </div>
+    <div class="detail-body">
+      <div id="op-detail-panel-info"></div>
+      <div id="op-detail-panel-care" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay hidden" id="zone-overlay" onclick="if(event.target===this)closeZoneForm()">
   <div class="setup-card" style="max-width:560px">
     <button class="setup-close" onclick="closeZoneForm()" title="Schließen">×</button>
@@ -1095,9 +1150,95 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="sub-list" id="fert-list"></div>
   </div>
 
-  <!-- Outdoor-Panels (Phase 0: Placeholder, kommen in O1/O2) -->
+  <!-- Outdoor-Panels: Sammlung (O2), Bereiche (O1), Zeitleiste (O4 Placeholder) -->
   <div id="panel-out-sammlung" class="panel">
-    <div class="care-placeholder">🌳 Outdoor-Sammlung – kommt in Phase O2.<br>Hier wird der Pflanzenbestand draußen mit Bereich-Filter, Event-First-Karten und Zeitleisten-Banner zu sehen sein.</div>
+    <div class="toolbar">
+      <input class="search" id="op-srch" placeholder="Pflanze suchen…" oninput="renderOutdoorGrid()" />
+      <select class="fsel" id="op-fzone" onchange="renderOutdoorGrid()"><option value="">Alle Bereiche</option></select>
+      <select class="fsel" id="op-fcat" onchange="renderOutdoorGrid()"><option value="">Alle Kategorien</option></select>
+      <button class="btn primary" onclick="openOutdoorAddForm()">+ Pflanze</button>
+    </div>
+
+    <div class="form-panel" id="op-form-panel" style="display:none">
+      <div class="form-row">
+        <div class="form-group" style="flex:2;min-width:180px">
+          <label class="form-label">Name *</label>
+          <input class="form-input" id="op-f-name" placeholder="z.B. Hortensie 'Endless Summer'" />
+        </div>
+        <div class="form-group" style="max-width:240px">
+          <label class="form-label">Bereich</label>
+          <select class="form-select" id="op-f-zone"></select>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group" style="max-width:200px">
+          <label class="form-label">Kategorie</label>
+          <select class="form-select" id="op-f-category">
+            <option value="">—</option>
+            <option value="staude">Staude</option>
+            <option value="strauch">Strauch</option>
+            <option value="obstbaum">Obstbaum</option>
+            <option value="beerenobst">Beerenobst</option>
+            <option value="zwiebelpflanze">Zwiebelpflanze</option>
+            <option value="gemuese">Gemüse</option>
+            <option value="kraut">Kraut</option>
+            <option value="rasen">Rasen</option>
+            <option value="kuebel">Kübelpflanze</option>
+            <option value="kletterpflanze">Kletterpflanze</option>
+          </select>
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label class="form-label">Anzahl</label>
+          <input class="form-input" id="op-f-count" type="number" min="1" placeholder="1" />
+        </div>
+        <div class="form-group" style="max-width:160px">
+          <label class="form-label">Winterhart</label>
+          <select class="form-select" id="op-f-hardy">
+            <option value="">—</option>
+            <option value="ja">ja</option>
+            <option value="bedingt">bedingt</option>
+            <option value="nein">nein</option>
+          </select>
+        </div>
+        <div class="form-group" style="max-width:140px">
+          <label class="form-label">Invasiv</label>
+          <select class="form-select" id="op-f-invasive">
+            <option value="">—</option>
+            <option value="ja">ja</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group">
+          <label class="form-label">Notizen</label>
+          <textarea class="form-input" id="op-f-notes" rows="3" placeholder="Pflegeanweisungen, Standortbesonderheiten…" style="height:auto;padding:8px 12px;resize:vertical;font-family:inherit;line-height:1.4"></textarea>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:.5rem">
+        <div class="form-group" style="max-width:200px">
+          <label class="form-label">Gießen alle … Wochen</label>
+          <input class="form-input" id="op-f-water-weeks" type="number" min="0" max="52" placeholder="leer = nicht getrackt" />
+        </div>
+        <div class="form-group" style="max-width:200px">
+          <label class="form-label">Düngen alle … Wochen</label>
+          <input class="form-input" id="op-f-fert-weeks" type="number" min="0" max="52" placeholder="leer = nicht getrackt" />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" id="op-save-btn" onclick="saveOutdoorPlant()">Speichern</button>
+        <button class="btn ghost" onclick="cancelOutdoorForm()">Abbrechen</button>
+        <button class="btn danger" id="op-delete-btn" onclick="deleteOutdoorPlantConfirm()" style="display:none">Löschen</button>
+        <span class="form-err" id="op-err"></span>
+        <span class="form-hint" id="op-hint">Wochen-Intervalle nur für Sonderfälle (Tomaten, frisch gepflanzte Bäume, Kübel). Die meisten Garten-Pflanzen brauchen das nicht — saisonale Events reichen.</span>
+      </div>
+    </div>
+
+    <div class="grid" id="op-grid"></div>
+    <div class="zone-empty" id="op-empty" style="display:none">
+      <div style="font-size:42px;margin-bottom:.5rem">🌳</div>
+      <strong>Noch keine Outdoor-Pflanzen.</strong><br>
+      <span class="zone-empty-hint">Lege Pflanzen einzeln an oder warte auf Phase O3 (Migration der Bestandsliste).</span>
+    </div>
   </div>
   <div id="panel-out-bereiche" class="panel">
     <div class="toolbar">
@@ -1133,12 +1274,12 @@ var FERTS = [];
 // Duenger-Kategorien mit Anzeige-Icons fuer Karten.
 // 'none' = explizit kein Duenger (z.B. fuer reine Sukkulenten-Pflege).
 var FERT_CATS = {
-  'green':      {label:'Gruenpflanzen', icon:'🌿', short:'Gruen'},
+  'green':      {label:'Grünpflanzen', icon:'🌿', short:'Grün'},
   'cacti':      {label:'Kakteen/Sukkulenten', icon:'🌵', short:'Kakteen'},
   'orchid':     {label:'Orchideen', icon:'🌸', short:'Orchidee'},
-  'flowering':  {label:'Blueh', icon:'💐', short:'Blueh'},
+  'flowering':  {label:'Blüh', icon:'💐', short:'Blüh'},
   'universal':  {label:'Universal', icon:'⊙', short:'Universal'},
-  'none':       {label:'Kein Duenger', icon:'⊘', short:'Keiner'}
+  'none':       {label:'Kein Dünger', icon:'⊘', short:'Keiner'}
 };
 var FERT_CAT_ORDER = ['green','cacti','orchid','flowering','universal','none'];
 
@@ -3321,13 +3462,26 @@ function fetchRepotSuggestion(p) {
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,system:'Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:'Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data) {
-    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    // API-Fehler erkennen: kein content-Array bedeutet Fehler-Antwort
+    if (!data.content || !Array.isArray(data.content)) {
+      console.warn('Repot-AI API-Fehler:', data);
+      var apiMsg = (data.error && data.error.message) ? data.error.message : 'unbekannt';
+      toast('API-Fehler: ' + apiMsg);
+      if (btn) { btn.disabled = false; btn.textContent = '✦ KI-Mischung neu vorschlagen'; }
+      return;
+    }
+    var raw = data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
     var obj;
     try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { toast('KI-Antwort Fehler.'); if(btn){btn.disabled=false; btn.textContent='✦ KI-Mischung neu vorschlagen';} return; }
+    catch(e) {
+      console.warn('Repot-AI JSON-Parse-Fehler:', e.message, '\nRaw:', raw, '\nFull:', data);
+      toast('Antwort-Format kaputt - siehe Browser-Konsole');
+      if(btn){btn.disabled=false; btn.textContent='✦ KI-Mischung neu vorschlagen';}
+      return;
+    }
     if (obj.mix && Array.isArray(obj.mix)) {
       repotMixRows = obj.mix.filter(function(m){return SUBS.some(function(s){return s.id===m.id;});}).map(function(m){return {subId:m.id, pct:m.pct};});
       var sum = repotMixRows.reduce(function(a,r){return a+r.pct;},0);
@@ -3440,6 +3594,7 @@ function showPanel(name,btn){
   if(name==='duenger') renderFertList();
   if(name==='kalender') renderCalendarPanel();
   if(name==='out-bereiche') openZonesPanel();
+  if(name==='out-sammlung') openOutdoorPanel();
 }
 
 var _tt;
@@ -3818,9 +3973,11 @@ function renderZoneCard(z) {
   var notesHtml = z.notes
     ? '<div class="zone-card-notes">' + esc(z.notes) + '</div>'
     : '';
-  // Pflanzenzahl: in O1 noch nicht verfuegbar, kommt mit O2.
-  // Vorerst nur "0 Pflanzen" als statische Anzeige.
-  var meta = '0 Pflanzen';
+  // Pflanzenzahl: aus outdoorPlants extrahieren wenn schon geladen
+  var n = outdoorPlantsLoaded
+    ? outdoorPlants.filter(function(p){return p.zoneId === z.id;}).length
+    : 0;
+  var meta = n === 1 ? '1 Pflanze' : (n + ' Pflanzen');
   if (z.areaM2) meta += ' · ' + z.areaM2 + ' m²';
 
   return '<div class="zone-card" onclick="openZoneForm(\'' + esc(z.id) + '\')">'+
@@ -4007,6 +4164,658 @@ function seedZonesUi() {
   });
 }
 
+
+// === Outdoor-Sammlung (Phase O2) ===
+// outdoorPlants wird beim ersten Klick auf den Outdoor-Sammlung-Tab geladen.
+// Schema siehe OUT_COLUMNS in Code.gs.
+
+var outdoorPlants = [];
+var outdoorEditId = null;
+var outdoorPlantsLoaded = false;
+
+var OUTDOOR_CAT_ICONS = {
+  staude: '🌿',
+  strauch: '🪴',
+  obstbaum: '🌳',
+  beerenobst: '🫐',
+  zwiebelpflanze: '🌷',
+  gemuese: '🥕',
+  kraut: '🌱',
+  rasen: '🌾',
+  kuebel: '🪴',
+  kletterpflanze: '🌿'
+};
+var OUTDOOR_CAT_LABELS = {
+  staude: 'Staude',
+  strauch: 'Strauch',
+  obstbaum: 'Obstbaum',
+  beerenobst: 'Beerenobst',
+  zwiebelpflanze: 'Zwiebelpflanze',
+  gemuese: 'Gemuese',
+  kraut: 'Kraut',
+  rasen: 'Rasen',
+  kuebel: 'Kuebel',
+  kletterpflanze: 'Kletterpflanze'
+};
+
+function opid() { return 'op' + Date.now() + Math.random().toString(36).slice(2,5); }
+
+// Wird beim Tab-Klick auf out-sammlung aufgerufen.
+// Laedt outdoorPlants und ZONES (falls noch nicht geladen).
+function openOutdoorPanel() {
+  if (outdoorPlantsLoaded) {
+    renderOutdoorGrid();
+    return;
+  }
+  var grid = document.getElementById('op-grid');
+  grid.innerHTML = '<div class="care-placeholder">Lade Outdoor-Pflanzen…</div>';
+  document.getElementById('op-empty').style.display = 'none';
+
+  // Beide parallel laden: Pflanzen und Bereiche (falls noch nicht geladen)
+  var pPlants = apiFetch({action: 'getOutdoorPlants'});
+  var pZones = zonesLoaded ? Promise.resolve({ok:true, data:ZONES}) : apiFetch({action: 'getZones'});
+
+  Promise.all([pPlants, pZones]).then(function(results) {
+    var resPlants = results[0];
+    var resZones = results[1];
+    outdoorPlants = (resPlants && resPlants.ok && Array.isArray(resPlants.data)) ? resPlants.data : [];
+    if (!zonesLoaded && resZones && resZones.ok && Array.isArray(resZones.data)) {
+      ZONES = resZones.data;
+      zonesLoaded = true;
+    }
+    outdoorPlantsLoaded = true;
+    populateOutdoorFilters();
+    renderOutdoorGrid();
+  }).catch(function() {
+    toast('Verbindungsfehler');
+    outdoorPlants = [];
+    outdoorPlantsLoaded = true;
+    renderOutdoorGrid();
+  });
+}
+
+function populateOutdoorFilters() {
+  // Bereich-Filter mit allen aktiven Bereichen
+  var fzone = document.getElementById('op-fzone');
+  var current = fzone.value;
+  fzone.innerHTML = '<option value="">Alle Bereiche</option>';
+  ZONES.filter(function(z){return z.active !== 'false';}).forEach(function(z) {
+    var opt = document.createElement('option');
+    opt.value = z.id;
+    opt.textContent = z.name;
+    fzone.appendChild(opt);
+  });
+  fzone.value = current;
+  // Kategorie-Filter ist statisch (im HTML schon gesetzt); nichts zu tun
+}
+
+// Naechstes anstehendes oder aktives Event finden, sortiert nach Datum.
+// Liefert {date, text, dateObj, recurYears} oder null.
+function nextEventForPlant(p) {
+  var evs = parseEvents(p.seasonalEvents);
+  if (!evs.length) return null;
+  var today = dayStart(new Date());
+  // Aktives Event hat Vorrang (innerhalb dieser Woche)
+  var thisWeekStart = lastWednesday(today);
+  var thisWeekEnd = nextWednesday(today);
+  var future = evs.map(function(e) {
+    return {date:e.date, text:e.text, recurYears:e.recurYears, dateObj: dayStart(new Date(e.date))};
+  }).filter(function(e){
+    return daysBetween(e.dateObj, thisWeekStart) >= 0;
+  }).sort(function(a,b){return a.dateObj - b.dateObj;});
+  return future.length ? future[0] : null;
+}
+
+function renderOutdoorGrid() {
+  var grid = document.getElementById('op-grid');
+  var empty = document.getElementById('op-empty');
+  var srch = (document.getElementById('op-srch').value || '').toLowerCase().trim();
+  var fzone = document.getElementById('op-fzone').value;
+  var fcat = document.getElementById('op-fcat').value;
+
+  var visible = outdoorPlants.filter(function(p) {
+    if (srch) {
+      var hay = (p.name + ' ' + (p.notes || '') + ' ' + (p.companions || '')).toLowerCase();
+      if (hay.indexOf(srch) < 0) return false;
+    }
+    if (fzone && p.zoneId !== fzone) return false;
+    if (fcat && p.category !== fcat) return false;
+    return true;
+  });
+
+  if (visible.length === 0) {
+    grid.innerHTML = '';
+    if (outdoorPlants.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      grid.innerHTML = '<div class="care-placeholder">Keine Pflanzen passen zu den Filtern.</div>';
+    }
+    document.getElementById('nav-count').textContent = '';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = visible.map(function(p){return renderOutdoorCard(p);}).join('');
+  document.getElementById('nav-count').textContent = visible.length + ' Pflanzen';
+}
+
+function renderOutdoorCard(p) {
+  var icon = OUTDOOR_CAT_ICONS[p.category] || '🌱';
+  var zone = ZONES.find(function(z){return z.id === p.zoneId;});
+  var zonePill = zone ? '<span class="op-card-zone">' + esc(zone.name) + '</span>' : '';
+  var warnPills = '';
+  if (p.hardy === 'nein' || p.hardy === 'bedingt') {
+    var label = p.hardy === 'nein' ? '❄️ frostempfindlich' : '❄️ bedingt frosthart';
+    warnPills += '<span class="op-card-warn-pill frost">' + label + '</span>';
+  }
+  if (p.invasive === 'ja') {
+    warnPills += '<span class="op-card-warn-pill invasive">⚠️ invasiv</span>';
+  }
+  var countLabel = '';
+  var n = parseInt(p.count, 10);
+  if (n && n > 1) countLabel = '<span class="op-card-count">×' + n + '</span>';
+
+  // Naechstes Event als Hauptzeile
+  var ev = nextEventForPlant(p);
+  var eventLine;
+  if (ev) {
+    var rec = parseInt(ev.recurYears, 10) || 1;
+    var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' J.</span>' : '';
+    eventLine = '<div class="op-card-event">'+
+      '<span class="op-card-event-date">' + esc(fmtDate(ev.date)) + '</span>'+
+      '<span class="op-card-event-text">' + esc(ev.text) + recPill + '</span>'+
+    '</div>';
+  } else {
+    eventLine = '<div class="op-card-event empty">keine Events geplant</div>';
+  }
+
+  return '<div class="card" onclick="openOutdoorDetailModal(\'' + esc(p.id) + '\')">'+
+    '<div class="card-head">'+
+      '<span class="card-icon">' + icon + '</span>'+
+      '<div class="card-title">' + esc(p.name) + countLabel + '</div>'+
+    '</div>'+
+    '<div class="card-tags">' + zonePill + warnPills + '</div>'+
+    eventLine +
+  '</div>';
+}
+
+// === Add/Edit-Form ===
+
+function openOutdoorAddForm() {
+  outdoorEditId = null;
+  populateOutdoorZoneSelect();
+  document.getElementById('op-f-name').value = '';
+  document.getElementById('op-f-zone').value = '';
+  document.getElementById('op-f-category').value = '';
+  document.getElementById('op-f-count').value = '';
+  document.getElementById('op-f-hardy').value = '';
+  document.getElementById('op-f-invasive').value = '';
+  document.getElementById('op-f-notes').value = '';
+  document.getElementById('op-f-water-weeks').value = '';
+  document.getElementById('op-f-fert-weeks').value = '';
+  document.getElementById('op-err').textContent = '';
+  document.getElementById('op-delete-btn').style.display = 'none';
+  document.getElementById('op-save-btn').textContent = 'Anlegen';
+  document.getElementById('op-form-panel').style.display = 'block';
+  document.getElementById('op-f-name').focus();
+}
+
+function openOutdoorEditForm(plantId) {
+  var p = outdoorPlants.find(function(x){return x.id === plantId;});
+  if (!p) return;
+  outdoorEditId = plantId;
+  populateOutdoorZoneSelect();
+  document.getElementById('op-f-name').value = p.name || '';
+  document.getElementById('op-f-zone').value = p.zoneId || '';
+  document.getElementById('op-f-category').value = p.category || '';
+  document.getElementById('op-f-count').value = p.count || '';
+  document.getElementById('op-f-hardy').value = p.hardy || '';
+  document.getElementById('op-f-invasive').value = p.invasive || '';
+  document.getElementById('op-f-notes').value = p.notes || '';
+  document.getElementById('op-f-water-weeks').value = p.wateringIntervalWeeks || '';
+  document.getElementById('op-f-fert-weeks').value = p.fertilizingIntervalWeeks || '';
+  document.getElementById('op-err').textContent = '';
+  document.getElementById('op-delete-btn').style.display = 'inline-flex';
+  document.getElementById('op-save-btn').textContent = 'Speichern';
+  document.getElementById('op-form-panel').style.display = 'block';
+  document.getElementById('op-f-name').focus();
+}
+
+function populateOutdoorZoneSelect() {
+  var sel = document.getElementById('op-f-zone');
+  sel.innerHTML = '<option value="">— kein Bereich —</option>';
+  ZONES.filter(function(z){return z.active !== 'false';}).forEach(function(z) {
+    var opt = document.createElement('option');
+    opt.value = z.id;
+    opt.textContent = z.name;
+    sel.appendChild(opt);
+  });
+}
+
+function cancelOutdoorForm() {
+  document.getElementById('op-form-panel').style.display = 'none';
+  outdoorEditId = null;
+}
+
+function saveOutdoorPlant() {
+  var name = document.getElementById('op-f-name').value.trim();
+  if (!name) {
+    document.getElementById('op-err').textContent = 'Name ist Pflicht.';
+    document.getElementById('op-f-name').focus();
+    return;
+  }
+  var countRaw = document.getElementById('op-f-count').value.trim();
+  var count = countRaw ? String(parseInt(countRaw,10) || 1) : '';
+  var wRaw = document.getElementById('op-f-water-weeks').value.trim();
+  var fRaw = document.getElementById('op-f-fert-weeks').value.trim();
+  var wWeeks = wRaw ? String(parseInt(wRaw,10) || '') : '';
+  var fWeeks = fRaw ? String(parseInt(fRaw,10) || '') : '';
+
+  var payload = {
+    name: name,
+    zoneId: document.getElementById('op-f-zone').value,
+    category: document.getElementById('op-f-category').value,
+    count: count,
+    hardy: document.getElementById('op-f-hardy').value,
+    invasive: document.getElementById('op-f-invasive').value,
+    notes: document.getElementById('op-f-notes').value.trim(),
+    wateringIntervalWeeks: wWeeks,
+    fertilizingIntervalWeeks: fWeeks
+  };
+
+  var btn = document.getElementById('op-save-btn');
+  btn.disabled = true;
+  document.getElementById('op-err').textContent = '';
+
+  var isEdit = !!outdoorEditId;
+  if (isEdit) {
+    payload.id = outdoorEditId;
+    payload.action = 'updateOutdoorPlant';
+  } else {
+    payload.id = opid();
+    payload.action = 'addOutdoorPlant';
+  }
+
+  apiFetch(payload).then(function(res) {
+    btn.disabled = false;
+    if (!res.ok) {
+      document.getElementById('op-err').textContent = 'Fehler: ' + (res.error || '?');
+      return;
+    }
+    if (isEdit) {
+      var idx = outdoorPlants.findIndex(function(x){return x.id === payload.id;});
+      if (idx >= 0) {
+        Object.keys(payload).forEach(function(k) {
+          if (k !== 'action') outdoorPlants[idx][k] = payload[k];
+        });
+      }
+      toast('Pflanze gespeichert');
+    } else {
+      var newPlant = {};
+      Object.keys(payload).forEach(function(k) {
+        if (k !== 'action') newPlant[k] = payload[k];
+      });
+      newPlant.updatedAt = new Date().toISOString();
+      newPlant.seasonalEvents = '';
+      newPlant.lastWatered = '';
+      newPlant.lastFertilized = '';
+      outdoorPlants.push(newPlant);
+      toast('Pflanze angelegt');
+    }
+    cancelOutdoorForm();
+    renderOutdoorGrid();
+  }).catch(function() {
+    btn.disabled = false;
+    document.getElementById('op-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+function deleteOutdoorPlantConfirm() {
+  if (!outdoorEditId) return;
+  var p = outdoorPlants.find(function(x){return x.id === outdoorEditId;});
+  if (!p) return;
+  if (!confirm('Pflanze "' + p.name + '" wirklich loeschen?')) return;
+  var btn = document.getElementById('op-delete-btn');
+  btn.disabled = true;
+  apiFetch({action: 'deleteOutdoorPlant', id: outdoorEditId}).then(function(res) {
+    btn.disabled = false;
+    if (!res.ok) {
+      document.getElementById('op-err').textContent = 'Fehler: ' + (res.error || '?');
+      return;
+    }
+    outdoorPlants = outdoorPlants.filter(function(x){return x.id !== outdoorEditId;});
+    toast('Pflanze geloescht');
+    cancelOutdoorForm();
+    renderOutdoorGrid();
+  }).catch(function() {
+    btn.disabled = false;
+    document.getElementById('op-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+// === Detail-Modal ===
+
+var outdoorDetailId = null;
+
+function openOutdoorDetailModal(plantId) {
+  var p = outdoorPlants.find(function(x){return x.id === plantId;});
+  if (!p) return;
+  outdoorDetailId = plantId;
+  // Standard auf Info-Tab
+  document.getElementById('op-detail-tab-info').classList.add('on');
+  document.getElementById('op-detail-tab-care').classList.remove('on');
+  document.getElementById('op-detail-panel-info').style.display = '';
+  document.getElementById('op-detail-panel-care').style.display = 'none';
+  renderOutdoorDetailInfo(p);
+  renderOutdoorDetailCare(p);
+  document.getElementById('op-detail-overlay').classList.remove('hidden');
+}
+
+function closeOutdoorDetailModal() {
+  document.getElementById('op-detail-overlay').classList.add('hidden');
+  outdoorDetailId = null;
+}
+
+function showOutdoorDetailTab(tab) {
+  var tabs = ['info','care'];
+  tabs.forEach(function(t) {
+    document.getElementById('op-detail-tab-' + t).classList.toggle('on', t === tab);
+    document.getElementById('op-detail-panel-' + t).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function renderOutdoorDetailInfo(p) {
+  var box = document.getElementById('op-detail-panel-info');
+  var icon = OUTDOOR_CAT_ICONS[p.category] || '🌱';
+  var catLabel = OUTDOOR_CAT_LABELS[p.category] || '';
+  var zone = ZONES.find(function(z){return z.id === p.zoneId;});
+  var n = parseInt(p.count, 10);
+  var countLabel = (n && n > 1) ? ' ×' + n : '';
+
+  // Stamm-Daten
+  var rows = [];
+  if (catLabel) rows.push(['Kategorie', catLabel]);
+  if (zone) rows.push(['Bereich', zone.name]);
+  if (n && n > 1) rows.push(['Anzahl', String(n)]);
+  if (p.hardy) rows.push(['Winterhart', p.hardy]);
+  if (p.invasive === 'ja') rows.push(['Hinweis', 'invasiv']);
+  if (p.companions) rows.push(['Pflanznachbarn', p.companions]);
+  if (p.plantedAt) rows.push(['Gepflanzt', fmtDate(p.plantedAt)]);
+
+  var rowsHtml = rows.map(function(r) {
+    return '<div class="detail-row"><span class="detail-label">' + esc(r[0]) + '</span>'+
+           '<span class="detail-value">' + esc(r[1]) + '</span></div>';
+  }).join('');
+
+  // Notizen
+  var notesHtml = '';
+  if (p.notes) {
+    notesHtml = '<div class="detail-section">'+
+      '<div class="detail-label">Notizen</div>'+
+      '<div class="detail-notes">' + esc(p.notes).replace(/\n/g,'<br>') + '</div>'+
+    '</div>';
+  }
+
+  // Wochen-Intervalle wenn gesetzt
+  var careInfo = '';
+  var wW = parseInt(p.wateringIntervalWeeks, 10);
+  var fW = parseInt(p.fertilizingIntervalWeeks, 10);
+  if ((wW && wW > 0) || (fW && fW > 0)) {
+    var careRows = [];
+    if (wW && wW > 0) {
+      var ws = dueStatus(p, 'water');
+      careRows.push('<div class="detail-row"><span class="detail-label">Giessen</span>'+
+        '<span class="detail-value">alle ' + wW + ' Wochen' +
+        (ws.tracked ? ' · ' + (ws.due ? '<strong>jetzt faellig</strong>' : 'in ' + ws.daysUntil + ' Tagen') : '') +
+        '</span></div>');
+    }
+    if (fW && fW > 0) {
+      var fs = dueStatus(p, 'fertilize');
+      careRows.push('<div class="detail-row"><span class="detail-label">Duengen</span>'+
+        '<span class="detail-value">alle ' + fW + ' Wochen' +
+        (fs.tracked ? ' · ' + (fs.due ? '<strong>jetzt faellig</strong>' : 'in ' + fs.daysUntil + ' Tagen') : '') +
+        '</span></div>');
+    }
+    careInfo = '<div class="detail-section"><div class="detail-label">Wochen-Pflege</div>' + careRows.join('') + '</div>';
+  }
+
+  // Saisonale Events (read-only Liste, mit Erledigt-Knopf wie Indoor)
+  var allEvents = parseEvents(p.seasonalEvents);
+  var eventsHtml = '';
+  if (allEvents.length) {
+    var today = dayStart(new Date());
+    var thisWeekStart = lastWednesday(today);
+    var thisWeekEnd = nextWednesday(today);
+    var sortedEvs = allEvents.slice().sort(function(a,b){
+      return new Date(a.date) - new Date(b.date);
+    });
+    var rowsEv = sortedEvs.map(function(ev){
+      var eDate = dayStart(new Date(ev.date));
+      var isActive = daysBetween(eDate, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, eDate) > 0;
+      var rec = parseInt(ev.recurYears, 10) || 1;
+      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
+      return '<div class="detail-event-row'+(isActive?' active':'')+'">'+
+        '<span class="detail-event-date">'+esc(fmtDate(ev.date))+'</span>'+
+        '<span class="detail-event-text">'+esc(ev.text)+recPill+'</span>'+
+      '</div>';
+    }).join('');
+    eventsHtml = '<div class="detail-section">'+
+      '<div class="detail-label">Saisonale Events</div>'+
+      rowsEv +
+    '</div>';
+  }
+
+  box.innerHTML = '<div class="detail-head">'+
+      '<span class="detail-icon">' + icon + '</span>'+
+      '<div>'+
+        '<div class="detail-title">' + esc(p.name) + esc(countLabel) + '</div>'+
+        (zone ? '<div class="detail-sub">' + esc(zone.name) + '</div>' : '') +
+      '</div>'+
+    '</div>'+
+    (rowsHtml ? '<div class="detail-section">' + rowsHtml + '</div>' : '') +
+    notesHtml +
+    careInfo +
+    eventsHtml +
+    '<div class="detail-actions" style="margin-top:1rem;display:flex;gap:8px">'+
+      '<button class="btn" onclick="openOutdoorEditFromDetail()">Bearbeiten</button>'+
+    '</div>';
+}
+
+function openOutdoorEditFromDetail() {
+  var id = outdoorDetailId;
+  closeOutdoorDetailModal();
+  // Tab auf Sammlung wenn nicht schon da
+  openOutdoorEditForm(id);
+  // Form ist im Sammlung-Panel - smooth scroll dahin
+  setTimeout(function(){
+    var el = document.getElementById('op-form-panel');
+    if (el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  }, 100);
+}
+
+function renderOutdoorDetailCare(p) {
+  var box = document.getElementById('op-detail-panel-care');
+  // Wenn Pflegeplan schon gecached: anzeigen, Reload-Button
+  // Wenn nicht: Generate-Button
+  if (p.carePlan && p.carePlan.trim()) {
+    var carePlanHtml = '';
+    try {
+      var obj = JSON.parse(p.carePlan);
+      // renderCarePlan ist Indoor-spezifisch (erwartet bestimmtes Format).
+      // Outdoor nutzt den gleichen Render mit Care-Sections-Konstante.
+      // Inline: einfach die Sections rendern wie Indoor
+      carePlanHtml = renderCarePlanGeneric(obj);
+    } catch(e) {
+      carePlanHtml = '<div style="color:var(--danger)">Pflegeplan-Daten kaputt</div>';
+    }
+    var ageStr = '';
+    if (p.carePlanAt) {
+      try {
+        var d = new Date(p.carePlanAt);
+        ageStr = ' (vom ' + fmtDate(d.toISOString().slice(0,10)) + ')';
+      } catch(e){}
+    }
+    box.innerHTML = '<div style="margin-bottom:1rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        '<span style="font-size:13px;color:var(--muted)">Gespeicherter Pflegeplan' + ageStr + '</span>'+
+        '<button class="btn sm" onclick="generateOutdoorCarePlan(true)">↻ Neu generieren</button>'+
+      '</div>' + carePlanHtml;
+  } else {
+    box.innerHTML = '<div style="text-align:center;padding:2rem 1rem">'+
+      '<div style="font-size:32px;margin-bottom:.5rem">✦</div>'+
+      '<strong>Noch kein Pflegeplan generiert</strong><br>'+
+      '<span style="font-size:13px;color:var(--muted)">Die KI erstellt einen detaillierten Pflegeplan, basierend auf der Pflanze und dem Bereich.</span><br>'+
+      '<button class="btn primary" style="margin-top:1rem" onclick="generateOutdoorCarePlan(false)">Pflegeplan generieren</button>'+
+    '</div>';
+  }
+}
+
+// Generischer Pflegeplan-Renderer (auch fuer Indoor wiederverwendbar wenn gewuenscht).
+// Erwartet obj mit Sections-Keys analog CARE_S Konstante.
+function renderCarePlanGeneric(obj) {
+  if (!obj || typeof obj !== 'object') return '<div style="color:var(--danger)">Daten kaputt</div>';
+  return CARE_S.map(function(s){
+    var content = obj[s.key];
+    if (!content || !String(content).trim()) return '';
+    return '<details class="detail-fold" open>'+
+      '<summary class="detail-fold-summary" style="border-left:3px solid '+s.color+'">'+
+        '<span class="detail-fold-icon">'+s.icon+'</span>'+
+        '<span class="detail-fold-label">'+esc(s.label)+'</span>'+
+      '</summary>'+
+      '<div class="detail-fold-body">'+esc(String(content)).replace(/\n/g,'<br>')+'</div>'+
+    '</details>';
+  }).join('');
+}
+
+function generateOutdoorCarePlan(invalidateOnly) {
+  if (!outdoorDetailId) return;
+  var p = outdoorPlants.find(function(x){return x.id === outdoorDetailId;});
+  if (!p) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+
+  var box = document.getElementById('op-detail-panel-care');
+  box.innerHTML = '<div style="text-align:center;padding:2rem 1rem">'+
+    '<div style="font-size:32px;margin-bottom:.5rem">✦</div>'+
+    '<strong>Pflegeplan wird generiert…</strong>'+
+  '</div>';
+
+  var zone = ZONES.find(function(z){return z.id === p.zoneId;});
+  var zoneCtx = zone ? buildZoneContextForPrompt(zone) : 'kein Bereich zugeordnet';
+  var todayIso = new Date().toISOString().slice(0,10);
+
+  var prompt = 'Du bist Garten-/Outdoor-Pflanzenexperte. Erstelle einen Pflegeplan fuer DIESE Garten-Pflanze in diesem Standort.\n\n'+
+    'Pflanze: ' + p.name + '\n' +
+    (p.category ? 'Kategorie: ' + (OUTDOOR_CAT_LABELS[p.category]||p.category) + '\n' : '') +
+    (p.hardy ? 'Winterhaerte: ' + p.hardy + '\n' : '') +
+    (p.invasive === 'ja' ? 'Hinweis: invasiv\n' : '') +
+    (p.companions ? 'Pflanznachbarn: ' + p.companions + '\n' : '') +
+    'Bereich/Standort: ' + zoneCtx + '\n' +
+    (p.notes ? 'User-Notizen (sehr wichtig, hat Vorrang vor Allgemeinwissen):\n' + p.notes + '\n' : '') +
+    '\nAntworte NUR mit JSON, Sektionen analog Indoor-Pflegeplan:\n' +
+    '{\n' +
+    '  "standort": "Standortbedingungen, Sonne, Boden",\n' +
+    '  "giessen": "Bewaesserung, beachte automatische Bewaesserungsanlage falls relevant",\n' +
+    '  "duengen": "Duengung, saisonale Empfehlungen, Mengen",\n' +
+    '  "rueckschnitt": "Wann und wie schneiden",\n' +
+    '  "fehler": "Haeufige Fehler bei dieser Pflanze",\n' +
+    '  "seasonalEvents": [{"date":"YYYY-MM-DD","text":"kurze Aufgabe","recurYears":1}]\n' +
+    '}\n\n' +
+    'seasonalEvents: 0-5 saisonale Pflege-Erinnerungen pro Jahr. Datumsangaben muessen ' + todayIso + ' oder spaeter sein. ' +
+    'recurYears: 1 fuer jaehrliche Wiederkehr (Default), 2-99 fuer Mehrjahresintervalle (z.B. "alle 3 Jahre Stauden teilen" -> recurYears: 3). ' +
+    'Text kurz und konkret. Auf User-Notizen Bezug nehmen wenn dort schon Pflegehinweise stehen.';
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    if (!data.content || !Array.isArray(data.content)) {
+      console.warn('Outdoor-CarePlan API-Fehler:', data);
+      var apiMsg = (data.error && data.error.message) ? data.error.message : 'unbekannt';
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">API-Fehler: ' + esc(apiMsg) + '</div>';
+      return;
+    }
+    var raw = data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) {
+      console.warn('Outdoor-CarePlan JSON-Parse-Fehler:', e.message, '\nRaw:', raw);
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">Antwort-Format kaputt - siehe Browser-Konsole</div>';
+      return;
+    }
+
+    // saisonalEvents validieren und in String serialisieren
+    var newSeasonalEvents = '';
+    if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0) {
+      var validEvents = obj.seasonalEvents.filter(function(e){
+        return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+      }).map(function(e){
+        var rec = parseInt(e.recurYears, 10);
+        return {
+          date: e.date,
+          text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -'),
+          recurYears: (rec && rec > 1) ? rec : 1
+        };
+      });
+      if (validEvents.length > 0) newSeasonalEvents = serializeEvents(validEvents);
+    }
+
+    // Carepan im Sheet speichern
+    var carePlanStr = JSON.stringify({
+      standort: obj.standort || '',
+      giessen: obj.giessen || '',
+      duengen: obj.duengen || '',
+      rueckschnitt: obj.rueckschnitt || '',
+      fehler: obj.fehler || ''
+    });
+
+    var payload = {
+      action: 'updateOutdoorPlant',
+      id: p.id,
+      carePlan: carePlanStr,
+      carePlanAt: new Date().toISOString()
+    };
+    // saisonalEvents nur ueberschreiben wenn aktuell leer (User-Wahl > KI)
+    if (newSeasonalEvents && (!p.seasonalEvents || !p.seasonalEvents.trim())) {
+      payload.seasonalEvents = newSeasonalEvents;
+    }
+
+    apiFetch(payload).then(function(res){
+      if (!res.ok) {
+        box.innerHTML = '<div style="color:var(--danger);padding:1rem">Speichern fehlgeschlagen: ' + esc(res.error||'?') + '</div>';
+        return;
+      }
+      // Lokal updaten
+      p.carePlan = carePlanStr;
+      p.carePlanAt = payload.carePlanAt;
+      if (payload.seasonalEvents) p.seasonalEvents = payload.seasonalEvents;
+      // Detail neu rendern
+      renderOutdoorDetailInfo(p);
+      renderOutdoorDetailCare(p);
+      // Grid neu rendern damit Event-Zeile aktualisiert ist
+      renderOutdoorGrid();
+      toast('Pflegeplan gespeichert');
+    }).catch(function(){
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">Verbindungsfehler beim Speichern</div>';
+    });
+  }).catch(function(err){
+    console.warn('Outdoor-CarePlan Network-Error:', err);
+    box.innerHTML = '<div style="color:var(--danger);padding:1rem">Verbindungsfehler: ' + esc(err.message||'unbekannt') + '</div>';
+  });
+}
+
+// Bereich-Kontext fuer KI-Prompts.
+function buildZoneContextForPrompt(z) {
+  var parts = [z.name];
+  if (z.category) parts.push('Kategorie: ' + z.category);
+  if (z.orientation) parts.push('Ausrichtung: ' + z.orientation);
+  if (z.sun) parts.push('Sonne: ' + z.sun);
+  if (z.soil) parts.push('Boden: ' + z.soil);
+  if (z.irrigationGroup) parts.push('Bewaesserung: ' + z.irrigationGroup + (z.irrigationCircuit ? ' ('+z.irrigationCircuit+')' : ''));
+  if (z.notes) parts.push('Notizen Bereich: ' + z.notes);
+  return parts.join('; ');
+}
+
 (function boot(){
   loadMode();
   applyMode();
@@ -4023,9 +4832,11 @@ function seedZonesUi() {
       var repot = document.getElementById('repot-overlay');
       var detail = document.getElementById('detail-overlay');
       var zone = document.getElementById('zone-overlay');
+      var opDetail = document.getElementById('op-detail-overlay');
       if (fertassign && !fertassign.classList.contains('hidden')) { closeFertAssignModal(); return; }
       if (repot && !repot.classList.contains('hidden')) { closeRepotModal(); return; }
       if (detail && !detail.classList.contains('hidden')) { closeDetailModal(); return; }
+      if (opDetail && !opDetail.classList.contains('hidden')) { closeOutdoorDetailModal(); return; }
       if (zone && !zone.classList.contains('hidden')) { closeZoneForm(); return; }
       closeSettings();
     }
