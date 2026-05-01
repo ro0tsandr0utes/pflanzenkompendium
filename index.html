@@ -507,6 +507,27 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   margin-left: 4px;
 }
 
+/* Wetter-Banner (Phase O5) */
+.weather-banner {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px 14px;
+  margin-bottom: .75rem;
+  display: flex; gap: 12px; align-items: flex-start;
+  font-size: 13px;
+}
+.weather-banner.warn { background: #FFF8E6; border-color: #F0DC9F; }
+.weather-banner.danger { background: var(--danger-l); border-color: var(--danger-l); }
+.weather-banner-icon { font-size: 20px; flex-shrink: 0; line-height: 1.4; }
+.weather-banner-lines { flex: 1; }
+.weather-banner-line {
+  line-height: 1.5;
+  color: var(--text);
+}
+.weather-banner-line + .weather-banner-line { margin-top: 2px; }
+.weather-banner-line.muted { color: var(--muted); font-size: 12px; }
+
 /* Outdoor-Zeitleiste (Phase O4) */
 .tl-toolbar {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -1251,6 +1272,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <button class="btn primary" onclick="openOutdoorAddForm()">+ Pflanze</button>
     </div>
 
+    <div class="weather-banner" id="op-weather-banner" style="display:none"></div>
+
     <div class="care-banner" id="op-banner" style="display:none"></div>
 
     <div class="form-panel" id="op-form-panel" style="display:none">
@@ -1685,6 +1708,8 @@ function init() {
     if (!fertRes.ok) toast('Fehler beim Laden der Dünger: ' + (fertRes.error || '?'));
     if (!plantRes.ok) toast('Fehler beim Laden der Pflanzen: ' + (plantRes.error || '?'));
     showLoading(false); renderAll();
+    // Wetter asynchron im Hintergrund laden, blockiert App-Boot nicht
+    loadWeather().then(function() { renderWeatherBanner(); });
   }).catch(function() {
     toast('Verbindungsfehler - Apps Script URL prüfen');
     SUBS = []; FERTS = []; plants = []; showLoading(false); renderAll();
@@ -4413,6 +4438,192 @@ function nextEventForPlant(p) {
   return future.length ? future[0] : null;
 }
 
+// === Wetter-Modul (Phase O5) ===
+// Standort: Sommerfeld (Kremmen), Brandenburg
+var WEATHER_LAT = 52.80;
+var WEATHER_LNG = 13.03;
+var WEATHER_CACHE_KEY = 'pfk_weather';
+var WEATHER_DATA = null; // im Memory nach erfolgreichem Laden
+
+// Schwellen
+var WEATHER_FROST_C = 0;
+var WEATHER_HEAT_C = 30;
+var WEATHER_SOIL_COLD_C = 12; // unter 12 Grad Bodentemp = zu kalt fuer Tomaten/Gurken
+var WEATHER_RAIN_ENOUGH_MM = 10; // 10 mm in 3 Tagen reicht generell
+
+function loadWeather() {
+  // Cache-Check: nur heute gefetchte Daten gelten
+  var todayIso = toIsoDate(dayStart(new Date()));
+  try {
+    var cached = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (cached) {
+      var parsed = JSON.parse(cached);
+      if (parsed && parsed.date === todayIso && parsed.data) {
+        WEATHER_DATA = parsed.data;
+        return Promise.resolve(WEATHER_DATA);
+      }
+    }
+  } catch (e) {
+    // korrupter Cache, ignorieren und neu laden
+  }
+
+  var url = 'https://api.open-meteo.com/v1/forecast' +
+    '?latitude=' + WEATHER_LAT +
+    '&longitude=' + WEATHER_LNG +
+    '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum' +
+    '&hourly=soil_temperature_6cm' +
+    '&past_days=3' +
+    '&forecast_days=3' +
+    '&timezone=Europe%2FBerlin' +
+    '&models=icon_seamless';
+  return fetch(url).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    WEATHER_DATA = data;
+    try {
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({date: todayIso, data: data}));
+    } catch (e) {
+      // Quota voll oder Privacy-Mode, ignorieren
+    }
+    return data;
+  }).catch(function(err) {
+    // Bei Fehler: kein Wetter, kein Cache. User-Wunsch.
+    WEATHER_DATA = null;
+    return null;
+  });
+}
+
+// Analysiert geladenes Wetter-Datenobjekt und liefert UI-relevante Hinweise.
+// Liefert {pastRainMm, frostDays, heatDays, soilTempNow, hasContent}.
+function analyzeWeather(data) {
+  var out = {pastRainMm: 0, frostDays: [], heatDays: [], soilTempNow: null, hasContent: false};
+  if (!data || !data.daily || !data.hourly) return out;
+
+  var todayIso = toIsoDate(dayStart(new Date()));
+  var daily = data.daily;
+  var times = daily.time || [];
+  var maxT = daily.temperature_2m_max || [];
+  var minT = daily.temperature_2m_min || [];
+  var rain = daily.precipitation_sum || [];
+
+  // Vergangene 3 Tage Niederschlag aufsummieren (alle Tage VOR heute)
+  for (var i = 0; i < times.length; i++) {
+    if (times[i] < todayIso) {
+      var v = parseFloat(rain[i]);
+      if (!isNaN(v)) out.pastRainMm += v;
+    }
+  }
+  out.pastRainMm = Math.round(out.pastRainMm * 10) / 10;
+
+  // Zukuenftige Frost-/Hitze-Tage (heute und danach)
+  for (var j = 0; j < times.length; j++) {
+    if (times[j] >= todayIso) {
+      var lo = parseFloat(minT[j]);
+      var hi = parseFloat(maxT[j]);
+      if (!isNaN(lo) && lo < WEATHER_FROST_C) {
+        out.frostDays.push({date: times[j], minC: lo});
+      }
+      if (!isNaN(hi) && hi > WEATHER_HEAT_C) {
+        out.heatDays.push({date: times[j], maxC: hi});
+      }
+    }
+  }
+
+  // Aktuelle Bodentemperatur in 6 cm: naechster stuendlicher Wert ab jetzt
+  var hourly = data.hourly;
+  var hTimes = hourly.time || [];
+  var hSoil = hourly.soil_temperature_6cm || [];
+  var nowIso = new Date().toISOString().substring(0, 13); // YYYY-MM-DDTHH
+  for (var k = 0; k < hTimes.length; k++) {
+    if (hTimes[k] >= nowIso) {
+      var t = parseFloat(hSoil[k]);
+      if (!isNaN(t)) { out.soilTempNow = Math.round(t * 10) / 10; break; }
+    }
+  }
+  // Fallback: letzter verfuegbarer Wert
+  if (out.soilTempNow === null) {
+    for (var m = hSoil.length - 1; m >= 0; m--) {
+      var t2 = parseFloat(hSoil[m]);
+      if (!isNaN(t2)) { out.soilTempNow = Math.round(t2 * 10) / 10; break; }
+    }
+  }
+
+  out.hasContent = out.pastRainMm > 0 || out.frostDays.length > 0 || out.heatDays.length > 0 || out.soilTempNow !== null;
+  return out;
+}
+
+// Wochentag-Kuerzel auf Deutsch fuer eine ISO-Datums-Zeichenkette (YYYY-MM-DD)
+var WEATHER_DOW_DE = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+function weatherDayLabel(iso) {
+  var d = new Date(iso);
+  var todayIso = toIsoDate(dayStart(new Date()));
+  if (iso === todayIso) return 'heute';
+  var tomorrowIso = toIsoDate(dayStart(new Date(Date.now() + 86400000)));
+  if (iso === tomorrowIso) return 'morgen';
+  return WEATHER_DOW_DE[d.getDay()];
+}
+
+function renderWeatherBanner() {
+  var banner = document.getElementById('op-weather-banner');
+  if (!banner) return;
+
+  if (!WEATHER_DATA) {
+    banner.style.display = 'none';
+    return;
+  }
+  var info = analyzeWeather(WEATHER_DATA);
+  if (!info.hasContent) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  var lines = [];
+  // Niederschlag der letzten 3 Tage
+  if (info.pastRainMm >= WEATHER_RAIN_ENOUGH_MM) {
+    lines.push('<div class="weather-banner-line">Letzte 3 Tage: <strong>'+info.pastRainMm+' mm Regen</strong> — keine Bewässerung nötig.</div>');
+  } else if (info.pastRainMm > 0) {
+    lines.push('<div class="weather-banner-line muted">Letzte 3 Tage: '+info.pastRainMm+' mm Regen.</div>');
+  } else {
+    lines.push('<div class="weather-banner-line muted">Letzte 3 Tage trocken — bei empfindlichen Pflanzen wässern.</div>');
+  }
+  // Frost
+  if (info.frostDays.length > 0) {
+    var fd = info.frostDays[0];
+    var label = weatherDayLabel(fd.date);
+    lines.push('<div class="weather-banner-line"><strong>Frost '+label+'</strong> ('+fmtTemp(fd.minC)+') — Vlies bereit?</div>');
+  }
+  // Hitze
+  if (info.heatDays.length > 0) {
+    var hd = info.heatDays[0];
+    var hlabel = weatherDayLabel(hd.date);
+    lines.push('<div class="weather-banner-line"><strong>Hitze '+hlabel+'</strong> ('+fmtTemp(hd.maxC)+') — zusätzlich gießen.</div>');
+  }
+  // Bodentemperatur (nur wenn kalt)
+  if (info.soilTempNow !== null && info.soilTempNow < WEATHER_SOIL_COLD_C) {
+    lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+' — zu kalt für Tomaten/Gurken.</div>');
+  } else if (info.soilTempNow !== null) {
+    lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+'.</div>');
+  }
+
+  // Banner-Stil: danger bei Frost, warn bei Hitze, sonst neutral
+  var cls = 'weather-banner';
+  var icon = '🌦️';
+  if (info.frostDays.length > 0) { cls += ' danger'; icon = '❄️'; }
+  else if (info.heatDays.length > 0) { cls += ' warn'; icon = '☀️'; }
+  else if (info.pastRainMm >= WEATHER_RAIN_ENOUGH_MM) { icon = '🌧️'; }
+
+  banner.className = cls;
+  banner.innerHTML =
+    '<div class="weather-banner-icon">'+icon+'</div>'+
+    '<div class="weather-banner-lines">'+lines.join('')+'</div>';
+  banner.style.display = 'flex';
+}
+
+function fmtTemp(c) {
+  return (c >= 0 ? '+' : '') + c.toFixed(1).replace('.', ',') + ' °C';
+}
+
 // Bevorstehende Events einer Outdoor-Pflanze, sortiert nach Datum.
 // Im Gegensatz zu nextEventForPlant ohne Mittwochs-Cutoff:
 // faellt nur Events raus, deren Datum vor heute liegt.
@@ -4745,6 +4956,7 @@ function renderOutdoorEventsBlock(events, totalCount) {
 }
 
 function renderOutdoorGrid() {
+  renderWeatherBanner();
   renderOutdoorBanner();
   var grid = document.getElementById('op-grid');
   var empty = document.getElementById('op-empty');
