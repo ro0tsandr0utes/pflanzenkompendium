@@ -378,6 +378,83 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   white-space: nowrap;
 }
 
+/* Bereiche-Tab (Phase O1) */
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.zone-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 1rem;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.zone-card:hover {
+  border-color: var(--g3);
+  box-shadow: 0 2px 8px rgba(0,0,0,.04);
+}
+.zone-card-head {
+  display: flex; align-items: baseline; gap: .5rem;
+  flex-wrap: wrap;
+}
+.zone-card-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 17px; font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 140px;
+}
+.zone-card-cat-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.zone-card-pills {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.zone-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg);
+  border: 1px solid var(--border-l);
+  border-radius: 10px;
+  padding: 2px 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.zone-pill.orientation { background: #FFF6E0; border-color: #F0E0A8; color: #7A5800; }
+.zone-pill.sun-vollsonne { background: #FFF6E0; border-color: #F0E0A8; color: #7A5800; }
+.zone-pill.sun-halbschatten { background: #EEF3FB; border-color: #C8D8EE; color: #2E4F84; }
+.zone-pill.sun-schatten { background: #ECECEC; border-color: #C8C8C8; color: #555; }
+.zone-pill.sun-wechselnd { background: #F4F0FA; border-color: #DCD0EE; color: #5A4A7A; }
+.zone-pill.irr { background: #E1F5EE; border-color: #9FE1CB; color: #0F6E56; }
+.zone-card-notes {
+  font-size: 12px; color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.zone-card-meta {
+  font-size: 11px; color: var(--muted);
+  margin-top: auto;
+  padding-top: .25rem;
+  border-top: 1px dashed var(--border-l);
+}
+.zone-empty {
+  text-align: center; padding: 3rem 1rem;
+  color: var(--muted);
+  font-size: 14px;
+}
+.zone-empty-hint { font-size: 13px; }
+
+.btn.danger {
+  background: var(--danger-l); color: var(--danger); border-color: var(--danger-l);
+}
+.btn.danger:hover { background: #F5D5D5; border-color: #F5D5D5; }
+
 .detail-fold {
   border: 1px solid var(--border-l);
   border-radius: 8px;
@@ -701,6 +778,112 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   </div>
 </div>
 
+<div class="overlay hidden" id="zone-overlay" onclick="if(event.target===this)closeZoneForm()">
+  <div class="setup-card" style="max-width:560px">
+    <button class="setup-close" onclick="closeZoneForm()" title="Schließen">×</button>
+    <div class="setup-leaf">🗺</div>
+    <div class="setup-title" id="zone-form-title">Bereich anlegen</div>
+    <div class="setup-sub">Beete, Obstbäume, Rasen, Gewächshaus. Nur der Name ist Pflicht — Rest kannst du später nachpflegen.</div>
+    <div class="form-row" style="margin-top:1rem">
+      <div class="form-group">
+        <label class="form-label">Name *</label>
+        <input class="form-input" id="z-name" placeholder="z.B. Sonnenterrasse" />
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group" style="max-width:200px">
+        <label class="form-label">Kategorie</label>
+        <select class="form-select" id="z-category">
+          <option value="">—</option>
+          <option value="beet">Beet</option>
+          <option value="hochbeet">Hochbeet</option>
+          <option value="rabatte">Rabatte</option>
+          <option value="rasen">Rasen</option>
+          <option value="obstbaum_einzeln">Obstbaum (einzeln)</option>
+          <option value="beerenbeet">Beerenbeet/Spalier</option>
+          <option value="spalier">Spalier (sonstige)</option>
+          <option value="gewaechshaus">Gewächshaus</option>
+          <option value="kuebel">Kübel</option>
+          <option value="hecke">Hecke</option>
+        </select>
+      </div>
+      <div class="form-group" style="max-width:160px">
+        <label class="form-label">Ausrichtung</label>
+        <select class="form-select" id="z-orientation">
+          <option value="">—</option>
+          <option value="N">N</option>
+          <option value="NO">NO</option>
+          <option value="O">O</option>
+          <option value="SO">SO</option>
+          <option value="S">S</option>
+          <option value="SW">SW</option>
+          <option value="W">W</option>
+          <option value="NW">NW</option>
+          <option value="mehrere">mehrere</option>
+        </select>
+      </div>
+      <div class="form-group" style="max-width:200px">
+        <label class="form-label">Sonne</label>
+        <select class="form-select" id="z-sun">
+          <option value="">—</option>
+          <option value="vollsonne">vollsonnig</option>
+          <option value="halbschatten">halbschatten</option>
+          <option value="schatten">schatten</option>
+          <option value="wechselnd">wechselnd</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Boden</label>
+        <input class="form-input" id="z-soil" placeholder="z.B. humos, lehmig" />
+      </div>
+      <div class="form-group" style="max-width:140px">
+        <label class="form-label">Fläche m²</label>
+        <input class="form-input" id="z-area" type="number" min="0" step="0.5" placeholder="optional" />
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group" style="max-width:240px">
+        <label class="form-label">Bewässerungs-Gruppe</label>
+        <select class="form-select" id="z-irr-group" onchange="updateZoneIrrCircuitState()">
+          <option value="">—</option>
+          <option value="rasen">Rasen</option>
+          <option value="beet_ost">Beet Ost</option>
+          <option value="beet_suedwest">Beet Süd+West</option>
+          <option value="straeucher">Sträucher / Gewächshaus / Rhodo</option>
+          <option value="manuell">manuell</option>
+          <option value="keine">keine</option>
+        </select>
+      </div>
+      <div class="form-group" style="max-width:140px">
+        <label class="form-label">Kreislauf</label>
+        <select class="form-select" id="z-irr-circuit">
+          <option value="">—</option>
+          <option value="K1">K1</option>
+          <option value="K2">K2</option>
+          <option value="K3">K3</option>
+          <option value="K4">K4</option>
+          <option value="K5">K5</option>
+          <option value="K6">K6</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Notizen</label>
+        <textarea class="form-input" id="z-notes" rows="3" placeholder="Pflanznachbarn, Besonderheiten…" style="height:auto;padding:8px 12px;resize:vertical;font-family:inherit;line-height:1.4"></textarea>
+      </div>
+    </div>
+    <div class="setup-actions" style="margin-top:1rem">
+      <button class="btn primary" id="z-save-btn" onclick="saveZone()">Speichern</button>
+      <button class="btn ghost" onclick="closeZoneForm()">Abbrechen</button>
+      <button class="btn danger" id="z-delete-btn" onclick="deleteZoneConfirm()" style="display:none">Löschen</button>
+      <span class="form-err" id="z-err"></span>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
@@ -917,7 +1100,17 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="care-placeholder">🌳 Outdoor-Sammlung – kommt in Phase O2.<br>Hier wird der Pflanzenbestand draußen mit Bereich-Filter, Event-First-Karten und Zeitleisten-Banner zu sehen sein.</div>
   </div>
   <div id="panel-out-bereiche" class="panel">
-    <div class="care-placeholder">🗺 Bereiche – kommt in Phase O1.<br>Beete, Rasen, Obstbäume, Gewächshaus mit Ausrichtung, Sonne, Bewässerungskreislauf.</div>
+    <div class="toolbar">
+      <input class="search" id="zone-srch" placeholder="Bereich suchen…" oninput="renderZoneGrid()" />
+      <button class="btn primary" onclick="openZoneForm()">+ Bereich</button>
+    </div>
+    <div class="zone-grid" id="zone-grid"></div>
+    <div class="zone-empty" id="zone-empty" style="display:none">
+      <div style="font-size:42px;margin-bottom:.5rem">🗺</div>
+      <strong>Noch keine Bereiche angelegt.</strong><br>
+      <span class="zone-empty-hint">Lege Beete, Obstbäume, Rasenflächen und Gewächshaus an. Pflanzen werden in Phase O2 dann darauf zugeordnet.</span><br>
+      <button class="btn" style="margin-top:1rem" onclick="seedZonesUi()">Vorgeschlagene Bereiche aus deiner Liste laden</button>
+    </div>
   </div>
   <div id="panel-out-zeitleiste" class="panel">
     <div class="care-placeholder">📅 Zeitleiste – kommt in Phase O4.<br>Saisonale Events der nächsten 12 Monate, gruppiert nach Monat, mit Bereich-Filter.</div>
@@ -959,6 +1152,11 @@ var CARE_S = [
 ];
 
 var plants = [], editId = null, cfg = {}, mixRows = [], dueFilterOn = false;
+
+// Outdoor-State (Phase O1: Bereiche)
+var ZONES = [];
+var zoneEditId = null;
+var zonesLoaded = false;
 
 // === Datums-Helpers (Pflegetag = Mittwoch) ===
 var WEDNESDAY = 3; // 0=So, 1=Mo, 2=Di, 3=Mi
@@ -1132,6 +1330,9 @@ function applyMode() {
 function setMode(m) {
   if (m !== 'indoor' && m !== 'outdoor') return;
   if (m === MODE) return;
+  // Falls noch ein Outdoor-Modal offen ist: schliessen
+  var zoneOv = document.getElementById('zone-overlay');
+  if (zoneOv && !zoneOv.classList.contains('hidden')) closeZoneForm();
   MODE = m;
   try { localStorage.setItem('pfk_mode', MODE); } catch(e){}
   applyMode();
@@ -3238,6 +3439,7 @@ function showPanel(name,btn){
   if(name==='substrate') renderSubList();
   if(name==='duenger') renderFertList();
   if(name==='kalender') renderCalendarPanel();
+  if(name==='out-bereiche') openZonesPanel();
 }
 
 var _tt;
@@ -3502,6 +3704,309 @@ function saveFertAssign() {
   next();
 }
 
+
+// === Bereiche (Phase O1) ===
+// ZONES wird beim ersten Klick auf den Bereiche-Tab geladen (lazy).
+// Daten kommen vom Apps-Script-Endpoint getZones, ein Bereich-Objekt sieht aus wie:
+// {id, name, category, orientation, sun, soil, irrigationGroup, irrigationCircuit,
+//  areaM2, notes, active, createdAt}
+
+var ZONE_CAT_LABELS = {
+  beet: 'Beet',
+  hochbeet: 'Hochbeet',
+  rabatte: 'Rabatte',
+  rasen: 'Rasen',
+  obstbaum_einzeln: 'Obstbaum',
+  beerenbeet: 'Beerenbeet',
+  spalier: 'Spalier',
+  gewaechshaus: 'Gewaechshaus',
+  kuebel: 'Kuebel',
+  hecke: 'Hecke'
+};
+var ZONE_IRR_GROUP_LABELS = {
+  rasen: 'Rasen',
+  beet_ost: 'Beet Ost',
+  beet_suedwest: 'Beet S+W',
+  straeucher: 'Straeucher',
+  manuell: 'manuell',
+  keine: 'keine'
+};
+// Sonne-Pill-Label (kurz). UI-Text mit Umlauten ist hier ok.
+var ZONE_SUN_LABELS = {
+  vollsonne: 'sonnig',
+  halbschatten: 'halbschattig',
+  schatten: 'schattig',
+  wechselnd: 'wechselnd'
+};
+
+function zid() { return 'z' + Date.now() + Math.random().toString(36).slice(2,5); }
+
+function openZonesPanel() {
+  if (zonesLoaded) {
+    renderZoneGrid();
+    return;
+  }
+  var grid = document.getElementById('zone-grid');
+  var empty = document.getElementById('zone-empty');
+  grid.innerHTML = '<div class="care-placeholder">Lade Bereiche…</div>';
+  empty.style.display = 'none';
+  apiFetch({action: 'getZones'}).then(function(res) {
+    if (!res.ok) {
+      toast('Fehler beim Laden der Bereiche: ' + (res.error || '?'));
+      ZONES = [];
+    } else {
+      ZONES = res.data || [];
+    }
+    zonesLoaded = true;
+    renderZoneGrid();
+  }).catch(function() {
+    toast('Verbindungsfehler');
+    ZONES = [];
+    zonesLoaded = true;
+    renderZoneGrid();
+  });
+}
+
+function renderZoneGrid() {
+  var grid = document.getElementById('zone-grid');
+  var empty = document.getElementById('zone-empty');
+  var srch = (document.getElementById('zone-srch').value || '').toLowerCase().trim();
+
+  // Nur aktive Bereiche
+  var visible = ZONES.filter(function(z) {
+    if (z.active === 'false') return false;
+    if (!srch) return true;
+    return (z.name || '').toLowerCase().indexOf(srch) >= 0
+        || (z.notes || '').toLowerCase().indexOf(srch) >= 0
+        || (ZONE_CAT_LABELS[z.category] || '').toLowerCase().indexOf(srch) >= 0;
+  });
+
+  if (visible.length === 0) {
+    grid.innerHTML = '';
+    if (ZONES.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      grid.innerHTML = '<div class="care-placeholder">Keine Bereiche passen zur Suche.</div>';
+    }
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = visible.map(function(z) { return renderZoneCard(z); }).join('');
+}
+
+function renderZoneCard(z) {
+  var catLabel = ZONE_CAT_LABELS[z.category] || '';
+  var catPill = catLabel ? '<span class="zone-pill">' + esc(catLabel) + '</span>' : '';
+  var orPill = z.orientation
+    ? '<span class="zone-pill orientation" title="Ausrichtung">' + esc(z.orientation) + '</span>'
+    : '';
+  var sunPill = z.sun && ZONE_SUN_LABELS[z.sun]
+    ? '<span class="zone-pill sun-' + esc(z.sun) + '">' + esc(ZONE_SUN_LABELS[z.sun]) + '</span>'
+    : '';
+  var irrLabel = '';
+  if (z.irrigationGroup && ZONE_IRR_GROUP_LABELS[z.irrigationGroup]) {
+    irrLabel = ZONE_IRR_GROUP_LABELS[z.irrigationGroup];
+    if (z.irrigationCircuit) irrLabel += ' (' + z.irrigationCircuit + ')';
+  } else if (z.irrigationCircuit) {
+    irrLabel = z.irrigationCircuit;
+  }
+  var irrPill = irrLabel
+    ? '<span class="zone-pill irr" title="Bewaesserung">' + esc(irrLabel) + '</span>'
+    : '';
+  var notesHtml = z.notes
+    ? '<div class="zone-card-notes">' + esc(z.notes) + '</div>'
+    : '';
+  // Pflanzenzahl: in O1 noch nicht verfuegbar, kommt mit O2.
+  // Vorerst nur "0 Pflanzen" als statische Anzeige.
+  var meta = '0 Pflanzen';
+  if (z.areaM2) meta += ' · ' + z.areaM2 + ' m²';
+
+  return '<div class="zone-card" onclick="openZoneForm(\'' + esc(z.id) + '\')">'+
+    '<div class="zone-card-head">'+
+      '<div class="zone-card-name">' + esc(z.name) + '</div>'+
+    '</div>'+
+    '<div class="zone-card-pills">'+ catPill + orPill + sunPill + irrPill + '</div>'+
+    notesHtml +
+    '<div class="zone-card-meta">' + esc(meta) + '</div>'+
+  '</div>';
+}
+
+function openZoneForm(zoneId) {
+  zoneEditId = zoneId || null;
+  var isEdit = !!zoneId;
+  var z = isEdit ? ZONES.find(function(x){return x.id === zoneId;}) : null;
+
+  document.getElementById('zone-form-title').textContent = isEdit ? 'Bereich bearbeiten' : 'Bereich anlegen';
+  document.getElementById('z-name').value         = z ? (z.name || '') : '';
+  document.getElementById('z-category').value     = z ? (z.category || '') : '';
+  document.getElementById('z-orientation').value  = z ? (z.orientation || '') : '';
+  document.getElementById('z-sun').value          = z ? (z.sun || '') : '';
+  document.getElementById('z-soil').value         = z ? (z.soil || '') : '';
+  document.getElementById('z-area').value         = z ? (z.areaM2 || '') : '';
+  document.getElementById('z-irr-group').value    = z ? (z.irrigationGroup || '') : '';
+  document.getElementById('z-irr-circuit').value  = z ? (z.irrigationCircuit || '') : '';
+  document.getElementById('z-notes').value        = z ? (z.notes || '') : '';
+  document.getElementById('z-err').textContent = '';
+  document.getElementById('z-delete-btn').style.display = isEdit ? 'inline-flex' : 'none';
+  updateZoneIrrCircuitState();
+  document.getElementById('zone-overlay').classList.remove('hidden');
+  document.getElementById('z-name').focus();
+}
+
+function closeZoneForm() {
+  document.getElementById('zone-overlay').classList.add('hidden');
+  zoneEditId = null;
+}
+
+// Bewaesserungs-Kreislauf nur aktiv wenn Gruppe gesetzt und nicht 'manuell'/'keine'
+function updateZoneIrrCircuitState() {
+  var group = document.getElementById('z-irr-group').value;
+  var circuit = document.getElementById('z-irr-circuit');
+  var disable = !group || group === 'manuell' || group === 'keine';
+  circuit.disabled = disable;
+  if (disable) circuit.value = '';
+}
+
+function saveZone() {
+  var name = document.getElementById('z-name').value.trim();
+  if (!name) {
+    document.getElementById('z-err').textContent = 'Name ist Pflicht.';
+    document.getElementById('z-name').focus();
+    return;
+  }
+  var areaRaw = document.getElementById('z-area').value.trim();
+  var area = areaRaw ? String(parseFloat(areaRaw) || '') : '';
+  var payload = {
+    name:               name,
+    category:           document.getElementById('z-category').value,
+    orientation:        document.getElementById('z-orientation').value,
+    sun:                document.getElementById('z-sun').value,
+    soil:               document.getElementById('z-soil').value.trim(),
+    irrigationGroup:    document.getElementById('z-irr-group').value,
+    irrigationCircuit:  document.getElementById('z-irr-circuit').value,
+    areaM2:             area,
+    notes:              document.getElementById('z-notes').value.trim(),
+    active:             'true'
+  };
+
+  var btn = document.getElementById('z-save-btn');
+  btn.disabled = true;
+  document.getElementById('z-err').textContent = '';
+
+  var isEdit = !!zoneEditId;
+  if (isEdit) {
+    payload.id = zoneEditId;
+    payload.action = 'updateZone';
+  } else {
+    payload.id = zid();
+    payload.action = 'addZone';
+  }
+
+  apiFetch(payload).then(function(res) {
+    btn.disabled = false;
+    if (!res.ok) {
+      document.getElementById('z-err').textContent = 'Fehler: ' + (res.error || '?');
+      return;
+    }
+    if (isEdit) {
+      var idx = ZONES.findIndex(function(x){return x.id === payload.id;});
+      if (idx >= 0) {
+        Object.keys(payload).forEach(function(k) {
+          if (k !== 'action') ZONES[idx][k] = payload[k];
+        });
+      }
+      toast('Bereich gespeichert');
+    } else {
+      var newZone = {};
+      Object.keys(payload).forEach(function(k) {
+        if (k !== 'action') newZone[k] = payload[k];
+      });
+      newZone.createdAt = new Date().toISOString();
+      ZONES.push(newZone);
+      toast('Bereich angelegt');
+    }
+    closeZoneForm();
+    renderZoneGrid();
+  }).catch(function() {
+    btn.disabled = false;
+    document.getElementById('z-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+function deleteZoneConfirm() {
+  if (!zoneEditId) return;
+  var z = ZONES.find(function(x){return x.id === zoneEditId;});
+  if (!z) return;
+  // Pruefen ob Outdoor-Pflanzen den Bereich referenzieren.
+  // In O1 noch nicht moeglich (keine Outdoor-Pflanzen-UI), aber Code steht
+  // schon fuer O2. getOutdoorPlants liefert in O1 ohnehin leeres Array.
+  apiFetch({action: 'getOutdoorPlants'}).then(function(res) {
+    var refs = 0;
+    if (res.ok && Array.isArray(res.data)) {
+      refs = res.data.filter(function(p){return p.zoneId === zoneEditId;}).length;
+    }
+    if (refs > 0) {
+      document.getElementById('z-err').textContent =
+        'Bereich wird von ' + refs + ' Pflanze(n) genutzt - erst dort umhaengen.';
+      return;
+    }
+    if (!confirm('Bereich "' + z.name + '" wirklich loeschen?')) return;
+    var btn = document.getElementById('z-delete-btn');
+    btn.disabled = true;
+    apiFetch({action: 'deleteZone', id: zoneEditId}).then(function(res2) {
+      btn.disabled = false;
+      if (!res2.ok) {
+        document.getElementById('z-err').textContent = 'Fehler: ' + (res2.error || '?');
+        return;
+      }
+      ZONES = ZONES.filter(function(x){return x.id !== zoneEditId;});
+      toast('Bereich geloescht');
+      closeZoneForm();
+      renderZoneGrid();
+    }).catch(function() {
+      btn.disabled = false;
+      document.getElementById('z-err').textContent = 'Verbindungsfehler';
+    });
+  }).catch(function() {
+    // Wenn getOutdoorPlants scheitert: trotzdem Loeschen erlauben (defensiv,
+    // aber nicht blockierend - in O1 sind ja eh noch keine Pflanzen da).
+    if (!confirm('Bereich "' + z.name + '" wirklich loeschen?')) return;
+    apiFetch({action: 'deleteZone', id: zoneEditId}).then(function(res2) {
+      if (!res2.ok) {
+        document.getElementById('z-err').textContent = 'Fehler: ' + (res2.error || '?');
+        return;
+      }
+      ZONES = ZONES.filter(function(x){return x.id !== zoneEditId;});
+      toast('Bereich geloescht');
+      closeZoneForm();
+      renderZoneGrid();
+    });
+  });
+}
+
+// Seed-Button im Empty-State
+function seedZonesUi() {
+  if (!confirm('19 Bereiche aus deiner Liste anlegen? Das laesst sich danach noch bearbeiten.')) return;
+  apiFetch({action: 'seedZones'}).then(function(res) {
+    if (!res.ok) {
+      toast('Fehler: ' + (res.error || '?'));
+      return;
+    }
+    if (res.data && res.data.skipped) {
+      toast(res.data.skipped);
+      return;
+    }
+    toast('Bereiche angelegt: ' + (res.data && res.data.seeded ? res.data.seeded : '?'));
+    // Liste neu laden
+    zonesLoaded = false;
+    openZonesPanel();
+  }).catch(function() {
+    toast('Verbindungsfehler');
+  });
+}
+
 (function boot(){
   loadMode();
   applyMode();
@@ -3517,9 +4022,11 @@ function saveFertAssign() {
       var fertassign = document.getElementById('fertassign-overlay');
       var repot = document.getElementById('repot-overlay');
       var detail = document.getElementById('detail-overlay');
+      var zone = document.getElementById('zone-overlay');
       if (fertassign && !fertassign.classList.contains('hidden')) { closeFertAssignModal(); return; }
       if (repot && !repot.classList.contains('hidden')) { closeRepotModal(); return; }
       if (detail && !detail.classList.contains('hidden')) { closeDetailModal(); return; }
+      if (zone && !zone.classList.contains('hidden')) { closeZoneForm(); return; }
       closeSettings();
     }
   });
