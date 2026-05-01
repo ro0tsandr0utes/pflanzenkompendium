@@ -1238,6 +1238,14 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
             <option value="universal">⊙ Universal</option>
           </select>
         </div>
+        <div class="form-group" style="max-width:160px">
+          <label class="form-label">Verwendung</label>
+          <select class="form-select" id="ff-usage">
+            <option value="indoor">🪴 Indoor</option>
+            <option value="outdoor">🌳 Outdoor</option>
+            <option value="both">🪴🌳 Beides</option>
+          </select>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -1690,6 +1698,7 @@ function convertFerts(rawFerts) {
       name: f.name,
       desc: f.desc,
       category: f.category || 'universal',
+      usage: f.usage || 'indoor',
       leer: f.leer === 'true',
       active: f.active === 'true' || f.active === ''
     };
@@ -2562,7 +2571,18 @@ function toggleSubLeer(id) {
 
 // === Duenger-UI ===
 
-function activeFerts() { return FERTS.filter(function(f){return f.active;}); }
+// Aktive Duenger filtern.
+// scope: 'indoor' | 'outdoor' | undefined (alle aktiven, fuer Listen-Ansichten).
+// Phase O6: usage-Feld auf D/Sheet kann 'indoor', 'outdoor' oder 'both' sein.
+// Bestehende Eintraege ohne usage gelten als 'indoor' (Default per Migration).
+function activeFerts(scope) {
+  return FERTS.filter(function(f) {
+    if (!f.active) return false;
+    if (!scope) return true;
+    var u = f.usage || 'indoor';
+    return u === scope || u === 'both';
+  });
+}
 function fertById(id) { return FERTS.find(function(f){return f.id===id;}); }
 
 function renderFertList() {
@@ -2573,21 +2593,32 @@ function renderFertList() {
   }
   box.innerHTML = FERTS.map(function(f) {
     var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
-    var assignedCount = plants.filter(function(p){return p.fertilizerId===f.id;}).length;
+    var u = f.usage || 'indoor';
+    var usageLabel = u === 'outdoor' ? '🌳 Outdoor' : (u === 'both' ? '🪴🌳 Beides' : '🪴 Indoor');
+    // Counter: nur fuer Indoor-/Beides-Duenger sinnvoll, da Outdoor-Pflanzen kein fertilizerId haben
+    var counterHtml = '';
+    if (u === 'indoor' || u === 'both') {
+      var assignedCount = plants.filter(function(p){return p.fertilizerId===f.id;}).length;
+      counterHtml = ' · ' + assignedCount + ' ' + (assignedCount===1?'Pflanze':'Pflanzen');
+    }
     var tags = '';
     if (f.leer) tags += ' <span class="leer-tag">Restbestand</span>';
     if (!f.active) tags += ' <span class="inactive-tag">inaktiv</span>';
+    // Reassign-Button macht nur Sinn fuer Indoor-/Beides-Duenger
+    var reassignBtn = (u === 'indoor' || u === 'both')
+      ? '<button class="act-btn" onclick="reassignFert(\''+f.id+'\')">KI-Zuordnung neu</button>'
+      : '';
     return '<div class="sub-item'+(f.active?'':' inactive')+'">'+
       '<div class="sub-dot" style="background:transparent;font-size:18px;line-height:1;width:auto;margin-top:0">'+cat.icon+'</div>'+
       '<div style="flex:1">'+
         '<div class="sub-name">'+esc(f.name)+
-          ' <span style="font-size:11px;color:var(--muted);font-weight:400">· '+esc(cat.label)+' · '+assignedCount+' '+(assignedCount===1?'Pflanze':'Pflanzen')+'</span>'+
+          ' <span style="font-size:11px;color:var(--muted);font-weight:400">· '+esc(cat.label)+' · '+esc(usageLabel)+counterHtml+'</span>'+
           tags+
         '</div>'+
         '<div class="sub-desc">'+esc(f.desc||'')+'</div>'+
         '<div class="sub-actions">'+
           '<button class="act-btn" onclick="startEditFert(\''+f.id+'\')">Bearbeiten</button>'+
-          '<button class="act-btn" onclick="reassignFert(\''+f.id+'\')">KI-Zuordnung neu</button>'+
+          reassignBtn+
           '<button class="act-btn" onclick="toggleFertLeer(\''+f.id+'\')">'+(f.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
           '<button class="act-btn" onclick="toggleFertActive(\''+f.id+'\')">'+(f.active?'Deaktivieren':'Aktivieren')+'</button>'+
         '</div>'+
@@ -2604,6 +2635,7 @@ function openFertForm() {
   document.getElementById('ff-name').value = '';
   document.getElementById('ff-desc').value = '';
   document.getElementById('ff-cat').value = 'green';
+  document.getElementById('ff-usage').value = 'indoor';
   document.getElementById('ff-leer').checked = false;
   document.getElementById('ff-active').checked = true;
   document.getElementById('ff-err').textContent = '';
@@ -2620,6 +2652,7 @@ function startEditFert(id) {
   document.getElementById('ff-name').value = f.name || '';
   document.getElementById('ff-desc').value = f.desc || '';
   document.getElementById('ff-cat').value = f.category || 'universal';
+  document.getElementById('ff-usage').value = f.usage || 'indoor';
   document.getElementById('ff-leer').checked = !!f.leer;
   document.getElementById('ff-active').checked = !!f.active;
   document.getElementById('ff-err').textContent = '';
@@ -2646,6 +2679,7 @@ function saveFertForm() {
   var name = document.getElementById('ff-name').value.trim();
   var desc = document.getElementById('ff-desc').value.trim();
   var cat = document.getElementById('ff-cat').value;
+  var usage = document.getElementById('ff-usage').value;
   var leer = document.getElementById('ff-leer').checked;
   var active = document.getElementById('ff-active').checked;
   if (!name) { document.getElementById('ff-err').textContent = 'Name fehlt'; return; }
@@ -2655,24 +2689,25 @@ function saveFertForm() {
   document.getElementById('ff-err').textContent = '';
   apiFetch({
     action: isEdit ? 'updateFert' : 'addFert',
-    id: id, name: name, desc: desc, category: cat,
+    id: id, name: name, desc: desc, category: cat, usage: usage,
     leer: leer ? 'true' : 'false',
     active: active ? 'true' : 'false'
   }).then(function(res){
     if (res.ok) {
       if (isEdit) {
         var f = fertById(id);
-        if (f) { f.name=name; f.desc=desc; f.category=cat; f.leer=leer; f.active=active; }
+        if (f) { f.name=name; f.desc=desc; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
       } else {
-        FERTS.push({id:id, name:name, desc:desc, category:cat, leer:leer, active:active});
+        FERTS.push({id:id, name:name, desc:desc, category:cat, usage:usage, leer:leer, active:active});
       }
       var wasNew = !isEdit;
       fertEditId = null;
       document.getElementById('fert-form-panel').style.display = 'none';
       toast(isEdit ? 'Dünger aktualisiert' : 'Dünger hinzugefügt');
       renderFertList();
-      // Bei neuem aktiven Duenger: KI-Zuordnung anstossen
-      if (wasNew && active) {
+      // Bei neuem aktiven Duenger: KI-Zuordnung nur fuer Indoor-Verwendungen
+      // (Outdoor-Bulk-Zuordnung kommt in einer spaeteren Phase)
+      if (wasNew && active && (usage === 'indoor' || usage === 'both')) {
         setTimeout(function(){ requestFertAssignment(id); }, 200);
       }
     } else {
@@ -2886,7 +2921,7 @@ function getCare(forceRefresh){
       :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
   }
   var fertTxt = '';
-  var availFerts = activeFerts();
+  var availFerts = activeFerts('indoor');
   if (availFerts.length > 0) {
     fertTxt = '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
       var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
@@ -3023,7 +3058,7 @@ function bulkRefreshCare() {
   var ok = 0, fail = 0;
   var i = 0;
   var subTxt = activeSubs().map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
-  var availFerts = activeFerts();
+  var availFerts = activeFerts('indoor');
   var fertTxt = availFerts.length > 0
     ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
         var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
@@ -3224,7 +3259,7 @@ function renderDetailInfo(p) {
   if (fWeeks > 0) {
     var currentFert = p.fertilizerId ? fertById(p.fertilizerId) : null;
     // Liste der Dropdown-Optionen: aktive Duenger plus ggf. der zugewiesene falls inaktiv
-    var optList = activeFerts().slice();
+    var optList = activeFerts('indoor').slice();
     if (currentFert && !currentFert.active) optList.push(currentFert);
     var fertOptions = '<option value="">– kein Dünger zugeordnet –</option>' +
       optList.map(function(f){
@@ -3382,7 +3417,7 @@ function refreshCarePlanInModal() {
   var ctx = mr.length > 0
     ? '\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
     : '\nSubstrat: '+(SUBS[si(p.subId)]?SUBS[si(p.subId)].name:'?')+'.';
-  var availFerts = activeFerts();
+  var availFerts = activeFerts('indoor');
   var fertTxt = availFerts.length > 0
     ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
         var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
@@ -3789,7 +3824,7 @@ function requestFertAssignment(fertId) {
       ' | Duenge-Intervall: alle ' + p.fertilizingIntervalWeeks + ' Wochen';
   }).join('\n');
 
-  var fertList = activeFerts().map(function(x) {
+  var fertList = activeFerts('indoor').map(function(x) {
     return x.id + ': ' + x.name + ' [' + x.category + ']' + (x.leer?' [Restbestand]':'') + ' - ' + x.desc;
   }).join('\n');
 
