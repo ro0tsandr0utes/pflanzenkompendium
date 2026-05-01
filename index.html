@@ -473,6 +473,15 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .op-card-event.empty { color: var(--muted); font-style: italic; font-size: 12px; }
+.op-card-event-sub {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+  padding-left: 2px;
+}
+.op-card-event-sub .op-card-event-date { font-size: 11px; }
+.op-card-event-sub .op-card-event-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op-card-zone {
   display: inline-block;
   font-size: 11px; font-weight: 500;
@@ -496,6 +505,87 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   font-size: 12px;
   color: var(--muted);
   margin-left: 4px;
+}
+
+/* Outdoor-Zeitleiste (Phase O4) */
+.tl-toolbar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.tl-month-nav {
+  display: flex; align-items: center; gap: 6px;
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--r); padding: 3px;
+}
+.tl-month-btn {
+  width: 32px; height: 32px;
+  border: none; background: none; cursor: pointer;
+  font-size: 16px; color: var(--muted);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.tl-month-btn:hover { background: var(--bg); color: var(--text); }
+.tl-month-label {
+  font-weight: 500; font-size: 14px;
+  min-width: 130px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tl-today-btn {
+  height: 40px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: white; color: var(--muted);
+  font-family: inherit; font-size: 13px;
+  cursor: pointer; transition: all .15s;
+}
+.tl-today-btn:hover { background: var(--bg); color: var(--text); }
+.tl-today-btn.on { background: var(--gl); color: var(--g1); border-color: var(--g3); }
+
+.tl-day-group {
+  margin-bottom: 1rem;
+}
+.tl-day-header {
+  font-size: 12px; font-weight: 500; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-l);
+  margin-bottom: 8px;
+}
+.tl-day-header.today { color: var(--g1); }
+.tl-day-header.overdue { color: var(--danger); }
+.tl-event {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid var(--border-l);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.tl-event-main { flex: 1; min-width: 0; }
+.tl-event-title {
+  font-size: 14px; line-height: 1.4;
+  color: var(--text);
+}
+.tl-event-title strong { font-weight: 500; }
+.tl-event-meta {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 4px; flex-wrap: wrap;
+}
+.tl-event-zone {
+  font-size: 11px;
+  background: var(--gl); color: var(--g1);
+  border: 1px solid var(--g3);
+  border-radius: 10px; padding: 1px 8px;
+}
+.tl-event-recur {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+.tl-event-empty {
+  text-align: center; padding: 3rem 1rem;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .detail-fold {
@@ -1259,7 +1349,16 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     </div>
   </div>
   <div id="panel-out-zeitleiste" class="panel">
-    <div class="care-placeholder">📅 Zeitleiste – kommt in Phase O4.<br>Saisonale Events der nächsten 12 Monate, gruppiert nach Monat, mit Bereich-Filter.</div>
+    <div class="tl-toolbar">
+      <div class="tl-month-nav">
+        <button class="tl-month-btn" onclick="timelineNavigate(-1)" title="Vorheriger Monat">‹</button>
+        <span class="tl-month-label" id="tl-month-label">—</span>
+        <button class="tl-month-btn" onclick="timelineNavigate(1)" title="Nächster Monat">›</button>
+      </div>
+      <button class="tl-today-btn" id="tl-today-btn" onclick="timelineToToday()">Heute</button>
+      <select class="fsel" id="tl-fzone" onchange="renderOutdoorTimeline()"><option value="">Alle Bereiche</option></select>
+    </div>
+    <div id="tl-content"></div>
   </div>
 
 </main>
@@ -3605,6 +3704,7 @@ function showPanel(name,btn){
   if(name==='kalender') renderCalendarPanel();
   if(name==='out-bereiche') openZonesPanel();
   if(name==='out-sammlung') openOutdoorPanel();
+  if(name==='out-zeitleiste') openOutdoorTimelinePanel();
 }
 
 var _tt;
@@ -4408,11 +4508,157 @@ function markOutdoorEventDone(plantId, eventDate) {
   });
 }
 
+// === Zeitleiste-Tab (Phase O4) ===
+// State: aktueller Monat als {year, month}, month 0-basiert.
+// Default: aktueller Monat.
+var timelineState = null;
+
+function ensureTimelineState() {
+  if (!timelineState) {
+    var now = new Date();
+    timelineState = {year: now.getFullYear(), month: now.getMonth()};
+  }
+}
+
+function timelineNavigate(delta) {
+  ensureTimelineState();
+  var m = timelineState.month + delta;
+  var y = timelineState.year;
+  while (m < 0) { m += 12; y -= 1; }
+  while (m > 11) { m -= 12; y += 1; }
+  timelineState.month = m;
+  timelineState.year = y;
+  renderOutdoorTimeline();
+}
+
+function timelineToToday() {
+  var now = new Date();
+  timelineState = {year: now.getFullYear(), month: now.getMonth()};
+  renderOutdoorTimeline();
+}
+
+function openOutdoorTimelinePanel() {
+  ensureTimelineState();
+
+  // Daten laden, falls noch nicht passiert (analog zu openOutdoorPanel)
+  var needPlants = !outdoorPlantsLoaded;
+  var needZones = !zonesLoaded;
+  if (needPlants || needZones) {
+    var content = document.getElementById('tl-content');
+    content.innerHTML = '<div class="tl-event-empty">Lade Outdoor-Daten…</div>';
+    var pPlants = needPlants ? apiFetch({action: 'getOutdoorPlants'}) : Promise.resolve({ok:true, data:outdoorPlants});
+    var pZones = needZones ? apiFetch({action: 'getZones'}) : Promise.resolve({ok:true, data:ZONES});
+    Promise.all([pPlants, pZones]).then(function(results) {
+      if (needPlants && results[0] && results[0].ok && Array.isArray(results[0].data)) {
+        outdoorPlants = results[0].data;
+        outdoorPlantsLoaded = true;
+      }
+      if (needZones && results[1] && results[1].ok && Array.isArray(results[1].data)) {
+        ZONES = results[1].data;
+        zonesLoaded = true;
+      }
+      populateTimelineFilter();
+      renderOutdoorTimeline();
+    }).catch(function() {
+      toast('Verbindungsfehler');
+      populateTimelineFilter();
+      renderOutdoorTimeline();
+    });
+    return;
+  }
+
+  populateTimelineFilter();
+  renderOutdoorTimeline();
+}
+
+function populateTimelineFilter() {
+  var fzone = document.getElementById('tl-fzone');
+  var current = fzone.value;
+  fzone.innerHTML = '<option value="">Alle Bereiche</option>';
+  ZONES.filter(function(z){return z.active !== 'false';}).forEach(function(z) {
+    var opt = document.createElement('option');
+    opt.value = z.id;
+    opt.textContent = z.name;
+    fzone.appendChild(opt);
+  });
+  fzone.value = current;
+}
+
+var TL_MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni',
+                    'Juli','August','September','Oktober','November','Dezember'];
+
 function renderOutdoorTimeline() {
-  // Stub fuer markOutdoorEventDone-Aufrufe wenn Tab nicht offen.
-  // Vollimplementierung folgt mit Zeitleiste-Tab.
   var panel = document.getElementById('panel-out-zeitleiste');
   if (!panel || !panel.classList.contains('on')) return;
+  ensureTimelineState();
+
+  var label = document.getElementById('tl-month-label');
+  label.textContent = TL_MONTHS_DE[timelineState.month] + ' ' + timelineState.year;
+
+  var todayBtn = document.getElementById('tl-today-btn');
+  var now = new Date();
+  var isCurrent = (timelineState.year === now.getFullYear() && timelineState.month === now.getMonth());
+  todayBtn.classList.toggle('on', isCurrent);
+
+  var fzone = document.getElementById('tl-fzone').value;
+
+  // Range: 1. des Monats bis 1. des Folgemonats (exklusiv)
+  var start = new Date(timelineState.year, timelineState.month, 1);
+  var end = new Date(timelineState.year, timelineState.month + 1, 1);
+
+  var events = outdoorEventsInRange(start, end);
+  if (fzone) {
+    events = events.filter(function(e){return e.zoneId === fzone;});
+  }
+
+  var content = document.getElementById('tl-content');
+  if (events.length === 0) {
+    content.innerHTML = '<div class="tl-event-empty">📅 Keine Events in '+
+      esc(TL_MONTHS_DE[timelineState.month])+' '+timelineState.year+
+      (fzone ? ' (gefiltert)' : '')+'.</div>';
+    return;
+  }
+
+  // Nach Tag gruppieren (Datum-String)
+  var groups = {};
+  var order = [];
+  events.forEach(function(e) {
+    if (!groups[e.date]) {
+      groups[e.date] = [];
+      order.push(e.date);
+    }
+    groups[e.date].push(e);
+  });
+
+  var todayIso = toIsoDate(dayStart(now));
+  var html = order.map(function(dateStr) {
+    var dayEvents = groups[dateStr];
+    var dayClass = '';
+    if (dateStr === todayIso) dayClass = ' today';
+    else if (dateStr < todayIso) dayClass = ' overdue';
+
+    var rows = dayEvents.map(function(e) {
+      var rec = parseInt(e.recurYears, 10) || 1;
+      var recLabel = rec > 1 ? '<span class="tl-event-recur">alle '+rec+' Jahre</span>' : '';
+      var zone = ZONES.find(function(z){return z.id === e.zoneId;});
+      var zonePill = zone ? '<span class="tl-event-zone">'+esc(zone.name)+'</span>' : '';
+      var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
+      return '<div class="tl-event">'+
+        '<div class="tl-event-main">'+
+          '<div class="tl-event-title"><strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+'</div>'+
+          (zonePill || recLabel ? '<div class="tl-event-meta">'+zonePill+recLabel+'</div>' : '')+
+        '</div>'+
+        '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
+      '</div>';
+    }).join('');
+
+    return '<div class="tl-day-group">'+
+      '<div class="tl-day-header'+dayClass+'">'+esc(fmtDate(dateStr))+'</div>'+
+      rows +
+    '</div>';
+  }).join('');
+
+  content.innerHTML = html;
 }
 
 function renderOutdoorBanner() {
@@ -4548,16 +4794,24 @@ function renderOutdoorCard(p) {
   var n = parseInt(p.count, 10);
   if (n && n > 1) countLabel = '<span class="op-card-count">×' + n + '</span>';
 
-  // Naechstes Event als Hauptzeile
-  var ev = nextEventForPlant(p);
+  // Naechstes Event als Hauptzeile, plus bis zu 3 weitere klein darunter (Phase O4)
+  var evs = outdoorEventsForPlant(p, 4);
   var eventLine;
-  if (ev) {
+  if (evs.length > 0) {
+    var ev = evs[0];
     var rec = parseInt(ev.recurYears, 10) || 1;
     var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' J.</span>' : '';
     eventLine = '<div class="op-card-event">'+
       '<span class="op-card-event-date">' + esc(fmtDate(ev.date)) + '</span>'+
       '<span class="op-card-event-text">' + esc(ev.text) + recPill + '</span>'+
     '</div>';
+    for (var k = 1; k < evs.length; k++) {
+      var sub = evs[k];
+      eventLine += '<div class="op-card-event-sub">'+
+        '<span class="op-card-event-date">' + esc(fmtDate(sub.date)) + '</span>'+
+        '<span class="op-card-event-text">' + esc(sub.text) + '</span>'+
+      '</div>';
+    }
   } else {
     eventLine = '<div class="op-card-event empty">keine Events geplant</div>';
   }
