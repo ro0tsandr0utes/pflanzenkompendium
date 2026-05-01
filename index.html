@@ -44,6 +44,25 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   display: flex; align-items: center; gap: 7px;
 }
 .nav-logo-leaf { font-size: 18px; }
+.mode-switch {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--bg); border-radius: 20px;
+  padding: 3px; flex-shrink: 0;
+}
+.mode-btn {
+  padding: 5px 12px; border: none; background: none;
+  font-family: 'DM Sans', sans-serif; font-size: 13px;
+  color: var(--muted); cursor: pointer; border-radius: 16px;
+  transition: all .15s; white-space: nowrap;
+  display: flex; align-items: center; gap: 4px;
+}
+.mode-btn.on { background: white; color: var(--text); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.mode-btn:hover:not(.on) { color: var(--text); }
+.mode-btn-icon { font-size: 14px; }
+@media (max-width: 700px) {
+  .mode-btn { padding: 5px 9px; font-size: 12px; }
+  .mode-btn-label { display: none; }
+}
 .nav-tabs { display: flex; gap: 2px; margin: 0 auto; }
 .nav-tab {
   padding: 7px 18px; border: none; background: none;
@@ -674,12 +693,25 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 
 <nav class="nav">
   <div class="nav-logo"><span class="nav-logo-leaf">🌿</span> Pflanzenkompendium</div>
-  <div class="nav-tabs">
+  <div class="mode-switch" role="tablist" aria-label="Modus">
+    <button class="mode-btn on" id="mode-indoor" onclick="setMode('indoor')" role="tab" aria-selected="true">
+      <span class="mode-btn-icon">🏠</span><span class="mode-btn-label">Indoor</span>
+    </button>
+    <button class="mode-btn" id="mode-outdoor" onclick="setMode('outdoor')" role="tab" aria-selected="false">
+      <span class="mode-btn-icon">🌳</span><span class="mode-btn-label">Outdoor</span>
+    </button>
+  </div>
+  <div class="nav-tabs" id="nav-tabs-indoor">
     <button class="nav-tab on" onclick="showPanel('sammlung', this)">Sammlung</button>
     <button class="nav-tab"    onclick="showPanel('berater',  this)">Lookup</button>
     <button class="nav-tab"    onclick="showPanel('substrate',this)">Substrate</button>
     <button class="nav-tab"    onclick="showPanel('duenger',  this)">Dünger</button>
     <button class="nav-tab"    onclick="showPanel('kalender', this)">Kalender</button>
+  </div>
+  <div class="nav-tabs" id="nav-tabs-outdoor" style="display:none">
+    <button class="nav-tab on" onclick="showPanel('out-sammlung', this)">Sammlung</button>
+    <button class="nav-tab"    onclick="showPanel('out-bereiche', this)">Bereiche</button>
+    <button class="nav-tab"    onclick="showPanel('out-zeitleiste', this)">Zeitleiste</button>
   </div>
   <span class="nav-count" id="nav-count"></span>
   <button class="nav-btn" onclick="openSettings()" title="Einstellungen">⚙</button>
@@ -802,7 +834,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <label for="sf-active" style="font-size:13px;cursor:pointer">Aktiv (für neue Mixes)</label>
         </div>
         <div class="form-group" style="max-width:240px">
-          <label class="form-label" title="Wie viele Wochen das Substrat die Pflanze vordüngt. 0 = mineralisch.">Vordüngung (Wochen)</label>
+          <label class="form-label" title="Wie viele Wochen das Substrat die Pflanze vorduengt. 0 = mineralisch.">Vordüngung (Wochen)</label>
           <input class="form-input" id="sf-nutrient-weeks" type="number" min="0" max="52" step="1" value="0" />
         </div>
       </div>
@@ -868,6 +900,17 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="sub-list" id="fert-list"></div>
   </div>
 
+  <!-- Outdoor-Panels (Phase 0: Placeholder, kommen in O1/O2) -->
+  <div id="panel-out-sammlung" class="panel">
+    <div class="care-placeholder">🌳 Outdoor-Sammlung – kommt in Phase O2.<br>Hier wird der Pflanzenbestand draußen mit Bereich-Filter, Event-First-Karten und Zeitleisten-Banner zu sehen sein.</div>
+  </div>
+  <div id="panel-out-bereiche" class="panel">
+    <div class="care-placeholder">🗺 Bereiche – kommt in Phase O1.<br>Beete, Rasen, Obstbäume, Gewächshaus mit Ausrichtung, Sonne, Bewässerungskreislauf.</div>
+  </div>
+  <div id="panel-out-zeitleiste" class="panel">
+    <div class="care-placeholder">📅 Zeitleiste – kommt in Phase O4.<br>Saisonale Events der nächsten 12 Monate, gruppiert nach Monat, mit Bereich-Filter.</div>
+  </div>
+
 </main>
 
 <script>
@@ -885,12 +928,12 @@ var FERTS = [];
 // Duenger-Kategorien mit Anzeige-Icons fuer Karten.
 // 'none' = explizit kein Duenger (z.B. fuer reine Sukkulenten-Pflege).
 var FERT_CATS = {
-  'green':      {label:'Grünpflanzen', icon:'🌿', short:'Grün'},
+  'green':      {label:'Gruenpflanzen', icon:'🌿', short:'Gruen'},
   'cacti':      {label:'Kakteen/Sukkulenten', icon:'🌵', short:'Kakteen'},
   'orchid':     {label:'Orchideen', icon:'🌸', short:'Orchidee'},
-  'flowering':  {label:'Blühpflanzen', icon:'💐', short:'Blüh'},
+  'flowering':  {label:'Blueh', icon:'💐', short:'Blueh'},
   'universal':  {label:'Universal', icon:'⊙', short:'Universal'},
-  'none':       {label:'Kein Dünger', icon:'⊘', short:'Keiner'}
+  'none':       {label:'Kein Duenger', icon:'⊘', short:'Keiner'}
 };
 var FERT_CAT_ORDER = ['green','cacti','orchid','flowering','universal','none'];
 
@@ -1017,6 +1060,55 @@ function dueStatus(plant, type) {
 function loadCfg() {
   try { cfg.url = localStorage.getItem('pfk_url')||''; cfg.key = localStorage.getItem('pfk_key')||''; } catch(e){}
   return !!(cfg.url && cfg.key);
+}
+
+// Modus: 'indoor' (Default) oder 'outdoor'. Reine UI-Property, persistiert in localStorage.
+// Phase 0: Outdoor-Tabs sind Placeholder. Schaltet zwischen Indoor- und Outdoor-Tab-Containern
+// und blendet Panels passend ein/aus.
+var MODE = 'indoor';
+function loadMode() {
+  try { MODE = localStorage.getItem('pfk_mode') || 'indoor'; } catch(e) { MODE = 'indoor'; }
+  if (MODE !== 'indoor' && MODE !== 'outdoor') MODE = 'indoor';
+}
+function applyMode() {
+  // Mode-Buttons synchronisieren
+  document.getElementById('mode-indoor').classList.toggle('on', MODE === 'indoor');
+  document.getElementById('mode-outdoor').classList.toggle('on', MODE === 'outdoor');
+  document.getElementById('mode-indoor').setAttribute('aria-selected', MODE === 'indoor' ? 'true' : 'false');
+  document.getElementById('mode-outdoor').setAttribute('aria-selected', MODE === 'outdoor' ? 'true' : 'false');
+  // Tab-Container umschalten
+  document.getElementById('nav-tabs-indoor').style.display  = MODE === 'indoor'  ? '' : 'none';
+  document.getElementById('nav-tabs-outdoor').style.display = MODE === 'outdoor' ? '' : 'none';
+  // Alle Panels schliessen, dann das erste des aktiven Modus oeffnen
+  var indoorPanels  = ['sammlung','berater','substrate','duenger','kalender'];
+  var outdoorPanels = ['out-sammlung','out-bereiche','out-zeitleiste'];
+  var allPanels = indoorPanels.concat(outdoorPanels);
+  allPanels.forEach(function(name) {
+    var el = document.getElementById('panel-' + name);
+    if (el) el.classList.remove('on');
+  });
+  // Tab-Highlight im aktiven Container zuruecksetzen, ersten Tab aktivieren
+  var activeContainer = MODE === 'indoor' ? 'nav-tabs-indoor' : 'nav-tabs-outdoor';
+  var tabs = document.querySelectorAll('#' + activeContainer + ' .nav-tab');
+  tabs.forEach(function(t, i) { t.classList.toggle('on', i === 0); });
+  var firstPanel = MODE === 'indoor' ? 'sammlung' : 'out-sammlung';
+  var firstEl = document.getElementById('panel-' + firstPanel);
+  if (firstEl) firstEl.classList.add('on');
+  // Indoor-spezifische Status-Anzeige (nav-count) im Outdoor-Modus leer lassen
+  var nc = document.getElementById('nav-count');
+  if (nc && MODE === 'outdoor') nc.textContent = '';
+}
+function setMode(m) {
+  if (m !== 'indoor' && m !== 'outdoor') return;
+  if (m === MODE) return;
+  MODE = m;
+  try { localStorage.setItem('pfk_mode', MODE); } catch(e){}
+  applyMode();
+  // Indoor-Modus: Sammlung neu rendern damit nav-count und Banner korrekt sind
+  if (MODE === 'indoor') {
+    renderBanner();
+    renderGrid();
+  }
 }
 function saveConfig() {
   var url = document.getElementById('cfg-url').value.trim();
@@ -1286,7 +1378,7 @@ function renderAll() {
   renderCalendarPanel();
   renderSubList();
   renderFertList();
-  document.getElementById('nav-count').textContent=plants.length+' Pflanzen';
+  document.getElementById('nav-count').textContent = MODE === 'indoor' ? (plants.length+' Pflanzen') : '';
 }
 
 function renderCalendarPanel() {
@@ -1482,12 +1574,12 @@ function renderFertBadge(p) {
   var fid = p.fertilizerId;
   if (!fid) {
     // Intervall > 0 aber kein Duenger zugeordnet -> Hinweis
-    return '<span class="due-badge upcoming" title="Kein Dünger zugeordnet" style="font-size:10px">❓ Dünger fehlt</span>';
+    return '<span class="due-badge upcoming" title="Kein Duenger zugeordnet" style="font-size:10px">❓ Dünger fehlt</span>';
   }
   var f = fertById(fid);
   if (!f) {
     // ID zeigt auf nicht-existenten Duenger (z.B. geloescht)
-    return '<span class="due-badge upcoming" title="Zugeordneter Dünger nicht gefunden" style="font-size:10px">❓ '+esc(fid)+'</span>';
+    return '<span class="due-badge upcoming" title="Zugeordneter Duenger nicht gefunden" style="font-size:10px">❓ '+esc(fid)+'</span>';
   }
   var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
   var col = f.active ? 'var(--g2)' : 'var(--muted)';
@@ -1812,7 +1904,7 @@ function renderSubList() {
     if (nw > 0) {
       nwTag = ' <span class="leer-tag" style="background:var(--gl);color:var(--g2)" title="Substrat enthält Nährstoffe für ca. '+nw+' Wochen">🌱 '+nw+'W vorgedüngt</span>';
     } else {
-      nwTag = ' <span class="inactive-tag" title="Mineralisches Substrat ohne Vordüngung">mineralisch</span>';
+      nwTag = ' <span class="inactive-tag" title="Mineralisches Substrat ohne Vorduengung">mineralisch</span>';
     }
     return '<div class="sub-item'+(s.active?'':' inactive')+'">'+
       '<div class="sub-dot" style="background:'+dotColor+'"></div>'+
@@ -2208,7 +2300,9 @@ function delPlant(id){
 }
 
 function useCare(name){
-  showPanel('berater',document.querySelectorAll('.nav-tab')[1]);
+  // Lookup ist ein Indoor-Tab. Falls aktuell Outdoor aktiv: erst zurueckschalten.
+  if (MODE !== 'indoor') setMode('indoor');
+  showPanel('berater', document.querySelectorAll('#nav-tabs-indoor .nav-tab')[1]);
   document.getElementById('care-q').value=name;
   getCare();
 }
@@ -2242,152 +2336,6 @@ function renderCarePlan(plantName, obj, opts){
     '</div>';
 }
 
-// === Pflegeplan-Helper ===
-// Gemeinsame Bausteine fuer getCare, bulkRefreshCare, refreshCarePlanInModal.
-// API-Prompts bleiben bei ae/oe/ue/ss (siehe ROADMAP-Konvention).
-
-// Substrat-Liste fuer Prompt: aktive Substrate nummeriert mit Restbestand-Hinweis.
-function buildSubTxt() {
-  return activeSubs().map(function(s,i){
-    return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;
-  }).join('\n');
-}
-
-// Duenger-Liste fuer Prompt (leerer String wenn keine Duenger im Bestand).
-function buildFertTxt(availFerts) {
-  if (!availFerts || availFerts.length === 0) return '';
-  return '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
-    var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
-    return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']' +
-           (f.leer?' (Restbestand - bevorzugen)':'') + ' - ' + (f.desc||'');
-  }).join('\n');
-}
-
-// Aktueller-Mix-Zeile fuer Prompt (oder "Substrat: <name>" wenn kein Mix gesetzt ist).
-function buildMixCtx(p) {
-  var mr = parseMix(p.subMix);
-  if (mr.length > 0) {
-    return '\nAktueller Mix: '+mr.map(function(r){
-      var idx=si(r.subId);
-      return r.pct+'% '+(idx>=0?SUBS[idx].name:r.subId);
-    }).join(', ')+'.';
-  }
-  return '\nSubstrat: '+(SUBS[si(p.subId)]?SUBS[si(p.subId)].name:'?')+'.';
-}
-
-// Vollstaendiger Pflegeplan-Prompt mit allen Phase-5f-Feldern (fertDose*, growthMonth*).
-// plantName: Pflanzenname, ctx: Substrat-Kontext (von buildMixCtx), opts.hasFerts: Boolean
-function buildCarePlanPrompt(plantName, ctx, hasFerts) {
-  var todayIso = toIsoDate(new Date());
-  var subTxt = buildSubTxt();
-  var fertTxt = buildFertTxt(activeFerts());
-
-  return 'Pflegeplan fuer Zimmerpflanze: '+plantName+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
-    'Heute ist der '+todayIso+'.\n\n'+
-    'Antworte NUR mit JSON:\n'+
-    '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
-    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
-    (hasFerts ? '"fertilizerId":"d1",' : '') +
-    '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
-    '"growthMonthStart":N,"growthMonthEnd":N,'+
-    '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
-    '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
-    'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
-    'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
-    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte. '+
-    (hasFerts ? 'fertilizerId: ID eines passenden Duengers aus der Liste oben - leer lassen wenn keiner gut passt oder die Pflanze nicht geduengt werden soll. ' : '') +
-    'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstumsphase bzw. Ruhephase. '+
-    'Werte: "voll" (volle Herstellerempfehlung), "halb" (50%), "viertel" (25%), "aussetzen" (komplett pausieren). '+
-    'Bei Pflanzen ohne Duengung beide leer lassen. '+
-    'growthMonthStart/growthMonthEnd: Monate (1-12) fuer die Wachstumsphase, alles ausserhalb ist Ruhephase. '+
-    'Beispiele: tropische Aroids ohne klare Ruhe = 1 bis 12. Sukkulenten = 4 bis 9. Orchideen oft 3 bis 10. '+
-    'seasonalEvents: 0-4 saisonale Pflege-Erinnerungen pro Jahr fuer diese Pflanze. '+
-    'Datumsangaben muessen in der Zukunft liegen ('+todayIso+' oder spaeter, im laufenden oder folgenden Jahr). '+
-    'text kurz und konkret ("Winterruhe einleiten - kuehl stellen, gießen halbieren"). '+
-    'Nur Events nennen die fuer DIESE Pflanze typisch sind - leeres Array wenn nichts saisonales relevant ist.';
-}
-
-// Gemeinsame API-Request-Config fuer alle Pflegeplan-Calls.
-function carePlanFetchOpts(prompt) {
-  return {
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens:1500,
-      system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',
-      messages:[{role:'user',content:prompt}]
-    })
-  };
-}
-
-// Wendet die KI-Antwort auf entry und payload an. Mutiert beide Objekte.
-// Override-Schutz: nur leere Felder werden ueberschrieben (User-Wahl > KI).
-// Returnt true, wenn Felder gesetzt wurden, die ein Grid-Re-Render rechtfertigen
-// (Intervalle oder seasonalEvents - Badges/Banner haengen daran).
-function applyCarePlanResponse(entry, obj, payload) {
-  var gridDirty = false;
-  var validDoses = ['voll','halb','viertel','aussetzen'];
-
-  // Intervalle
-  var wSugg = parseInt(obj.wateringIntervalWeeks);
-  var fSugg = parseInt(obj.fertilizingIntervalWeeks);
-  if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
-    entry.wateringIntervalWeeks = String(wSugg);
-    payload.wateringIntervalWeeks = String(wSugg);
-    gridDirty = true;
-  }
-  if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
-    entry.fertilizingIntervalWeeks = String(fSugg);
-    payload.fertilizingIntervalWeeks = String(fSugg);
-    gridDirty = true;
-  }
-
-  // Duenger-Zuordnung
-  if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
-    entry.fertilizerId = obj.fertilizerId;
-    payload.fertilizerId = obj.fertilizerId;
-    gridDirty = true;
-  }
-
-  // Dosis-Felder
-  if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
-    entry.fertDoseGrowth = obj.fertDoseGrowth;
-    payload.fertDoseGrowth = obj.fertDoseGrowth;
-  }
-  if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
-    entry.fertDoseDormant = obj.fertDoseDormant;
-    payload.fertDoseDormant = obj.fertDoseDormant;
-  }
-  var gms = parseInt(obj.growthMonthStart);
-  var gme = parseInt(obj.growthMonthEnd);
-  if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
-    entry.growthMonthStart = String(gms);
-    payload.growthMonthStart = String(gms);
-  }
-  if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
-    entry.growthMonthEnd = String(gme);
-    payload.growthMonthEnd = String(gme);
-  }
-
-  // Saisonale Events: Pipe und Doppelpunkt im Text neutralisieren, sonst zerlegt parseEvents falsch.
-  if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
-    var validEvents = obj.seasonalEvents.filter(function(e){
-      return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
-    }).map(function(e){
-      return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
-    });
-    if (validEvents.length > 0) {
-      var serialized = serializeEvents(validEvents);
-      entry.seasonalEvents = serialized;
-      payload.seasonalEvents = serialized;
-      gridDirty = true;
-    }
-  }
-
-  return gridDirty;
-}
-
 function getCare(forceRefresh){
   var q=document.getElementById('care-q').value.trim(); if(!q) return;
   var box=document.getElementById('care-result');
@@ -2403,40 +2351,130 @@ function getCare(forceRefresh){
   }
 
   box.innerHTML='<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>';
+  var subTxt=activeSubs().map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
+  var ctx='';
+  if(entry){
+    var mr=parseMix(entry.subMix);
+    ctx=mr.length>0
+      ?'\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
+      :'\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
+  }
+  var fertTxt = '';
   var availFerts = activeFerts();
-  var ctx = entry ? buildMixCtx(entry) : '';
-  var prompt = buildCarePlanPrompt(q, ctx, availFerts.length > 0);
+  if (availFerts.length > 0) {
+    fertTxt = '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+      var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+      return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+    }).join('\n');
+  }
+  var todayIso = toIsoDate(new Date());
+  var prompt='Pflegeplan fuer Zimmerpflanze: '+q+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
+    'Heute ist der '+todayIso+'.\n\n'+
+    'Antworte NUR mit JSON:\n'+
+    '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+    '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
+    '"growthMonthStart":N,"growthMonthEnd":N,'+
+    '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
+    '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
+    'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
+    'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
+    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte. '+
+    (availFerts.length>0 ? 'fertilizerId: ID eines passenden Duengers aus der Liste oben - leer lassen wenn keiner gut passt oder die Pflanze nicht geduengt werden soll. ' : '') +
+    'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstumsphase bzw. Ruhephase. '+
+    'Werte: "voll" (volle Herstellerempfehlung), "halb" (50%), "viertel" (25%), "aussetzen" (komplett pausieren). '+
+    'Bei Pflanzen ohne Duengung beide leer lassen. '+
+    'growthMonthStart/growthMonthEnd: Monate (1-12) fuer die Wachstumsphase, alles ausserhalb ist Ruhephase. '+
+    'Beispiele: tropische Aroids ohne klare Ruhe = 1 bis 12. Sukkulenten = 4 bis 9. Orchideen oft 3 bis 10. '+
+    'seasonalEvents: 0-4 saisonale Pflege-Erinnerungen pro Jahr fuer diese Pflanze. '+
+    'Datumsangaben muessen in der Zukunft liegen ('+todayIso+' oder spaeter, im laufenden oder folgenden Jahr). '+
+    'text kurz und konkret ("Winterruhe einleiten - kuehl stellen, gießen halbieren"). '+
+    'Nur Events nennen die fuer DIESE Pflanze typisch sind - leeres Array wenn nichts saisonales relevant ist.';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var raw=data.content&&data.content.find(function(b){return b.type==='text';});
+    raw=raw?raw.text:'{}';
+    var obj;
+    try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
+    catch(e){box.innerHTML='<div style="color:var(--danger);font-size:14px">Antwort konnte nicht verarbeitet werden.</div>';return;}
 
-  fetch('https://api.anthropic.com/v1/messages', carePlanFetchOpts(prompt))
-    .then(function(r){return r.json();})
-    .then(function(data){
-      var raw=data.content&&data.content.find(function(b){return b.type==='text';});
-      raw=raw?raw.text:'{}';
-      var obj;
-      try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
-      catch(e){box.innerHTML='<div style="color:var(--danger);font-size:14px">Antwort konnte nicht verarbeitet werden.</div>';return;}
+    // Wenn Pflanze in Sammlung: Cache ins Sheet zurueckschreiben
+    if (entry) {
+      var planJson = JSON.stringify(obj);
+      var nowIso = new Date().toISOString();
+      entry.carePlan = planJson;
+      entry.carePlanAt = nowIso;
+      var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
 
-      // Wenn Pflanze in Sammlung: Cache ins Sheet zurueckschreiben + Felder uebernehmen
-      if (entry) {
-        var planJson = JSON.stringify(obj);
-        var nowIso = new Date().toISOString();
-        entry.carePlan = planJson;
-        entry.carePlanAt = nowIso;
-        var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
-
-        var gridDirty = applyCarePlanResponse(entry, obj, payload);
-
-        apiFetch(payload).catch(function(){ toast('Pflegeplan konnte nicht gespeichert werden'); });
-        renderCarePlan(entry.name, obj, {cachedAt: nowIso, canRefresh: true});
-        if (gridDirty) {
-          renderBanner();
-          renderGrid();
-        }
-      } else {
-        renderCarePlan(q, obj, {canRefresh: false});
+      // Intervalle nur uebernehmen wenn noch nichts gesetzt ist - User-Werte schlagen KI-Werte
+      var wSugg = parseInt(obj.wateringIntervalWeeks);
+      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
+      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
+        entry.wateringIntervalWeeks = String(wSugg);
+        payload.wateringIntervalWeeks = String(wSugg);
       }
-    })
-    .catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
+      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
+        entry.fertilizingIntervalWeeks = String(fSugg);
+        payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      // fertilizerId nur uebernehmen wenn entry-Feld leer
+      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
+        entry.fertilizerId = obj.fertilizerId;
+        payload.fertilizerId = obj.fertilizerId;
+      }
+
+      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
+      var validDoses = ['voll','halb','viertel','aussetzen'];
+      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
+        entry.fertDoseGrowth = obj.fertDoseGrowth;
+        payload.fertDoseGrowth = obj.fertDoseGrowth;
+      }
+      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
+        entry.fertDoseDormant = obj.fertDoseDormant;
+        payload.fertDoseDormant = obj.fertDoseDormant;
+      }
+      var gms = parseInt(obj.growthMonthStart);
+      var gme = parseInt(obj.growthMonthEnd);
+      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
+        entry.growthMonthStart = String(gms);
+        payload.growthMonthStart = String(gms);
+      }
+      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
+        entry.growthMonthEnd = String(gme);
+        payload.growthMonthEnd = String(gme);
+      }
+
+      // Saisonale Events nur uebernehmen wenn noch keine gesetzt sind
+      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
+        var validEvents = obj.seasonalEvents.filter(function(e){
+          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+        }).map(function(e){
+          // Pipe und Doppelpunkt im Text neutralisieren, sonst zerlegt parseEvents falsch
+          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
+        });
+        if (validEvents.length > 0) {
+          var serialized = serializeEvents(validEvents);
+          entry.seasonalEvents = serialized;
+          payload.seasonalEvents = serialized;
+        }
+      }
+
+      apiFetch(payload).catch(function(){ toast('Pflegeplan konnte nicht gespeichert werden'); });
+      renderCarePlan(entry.name, obj, {cachedAt: nowIso, canRefresh: true});
+      // Falls Intervalle oder Events gesetzt wurden, Sammlung re-rendern damit Badges/Banner erscheinen
+      if (payload.wateringIntervalWeeks || payload.fertilizingIntervalWeeks !== undefined || payload.seasonalEvents) {
+        renderBanner();
+        renderGrid();
+      }
+    } else {
+      renderCarePlan(q, obj, {canRefresh: false});
+    }
+  }).catch(function(err){box.innerHTML='<div style="color:var(--danger);font-size:14px">API-Fehler: '+esc(err.message||'Unbekannt')+'</div>';});
 }
 
 // === Temporäre Wartung: Bulk-Refresh aller Pflegepläne ===
@@ -2458,7 +2496,15 @@ function bulkRefreshCare() {
   btn.textContent = 'Läuft…';
   var ok = 0, fail = 0;
   var i = 0;
-  var hasFerts = activeFerts().length > 0;
+  var subTxt = activeSubs().map(function(s,j){return 'Produkt '+(j+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
+  var availFerts = activeFerts();
+  var fertTxt = availFerts.length > 0
+    ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+        var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+        return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+      }).join('\n')
+    : '';
+  var todayIso = toIsoDate(new Date());
 
   function next() {
     if (i >= plants.length) {
@@ -2471,32 +2517,103 @@ function bulkRefreshCare() {
     var entry = plants[i];
     st.textContent = 'Pflanze ' + (i+1) + ' von ' + plants.length + ': ' + entry.name + '…';
 
-    var prompt = buildCarePlanPrompt(entry.name, buildMixCtx(entry), hasFerts);
+    var mr = parseMix(entry.subMix);
+    var ctx = mr.length > 0
+      ? '\nAktueller Mix: '+mr.map(function(r){var idx=si(r.subId);return r.pct+'% '+(idx>=0?SUBS[idx].name:r.subId);}).join(', ')+'.'
+      : '\nSubstrat: '+(SUBS[si(entry.subId)]?SUBS[si(entry.subId)].name:'?')+'.';
 
-    fetch('https://api.anthropic.com/v1/messages', carePlanFetchOpts(prompt))
-      .then(function(r){return r.json();})
-      .then(function(data){
-        var raw = data.content && data.content.find(function(b){return b.type==='text';});
-        raw = raw ? raw.text : '{}';
-        var obj;
-        try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-        catch(e) { fail++; i++; setTimeout(next, 600); return; }
+    var prompt = 'Pflegeplan fuer Zimmerpflanze: '+entry.name+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
+      'Heute ist der '+todayIso+'.\n\n'+
+      'Antworte NUR mit JSON:\n'+
+      '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+      '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+      (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+      '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
+      '"growthMonthStart":N,"growthMonthEnd":N,'+
+      '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
+      '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
+      'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa. '+
+      'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks 2-8 oder 0 wenn nicht zu duengen. '+
+      (availFerts.length>0 ? 'fertilizerId: ID eines passenden Duengers aus der Liste oder leer wenn keiner passt. ' : '') +
+      'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstums- bzw. Ruhephase. '+
+      'Werte: "voll", "halb", "viertel", "aussetzen". Bei nicht-zu-duengenden Pflanzen leer lassen. '+
+      'growthMonthStart/growthMonthEnd: Monate (1-12) der Wachstumsphase. Tropisch ohne Ruhe = 1 bis 12, Sukkulenten = 4 bis 9, Orchideen oft 3 bis 10. '+
+      'seasonalEvents: 0-4 saisonale Erinnerungen, Datum >= '+todayIso+', text kurz und konkret. '+
+      'Leeres Array wenn nichts saisonales relevant.';
 
-        var planJson = JSON.stringify(obj);
-        var nowIso = new Date().toISOString();
-        entry.carePlan = planJson;
-        entry.carePlanAt = nowIso;
-        var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(data){
+      var raw = data.content && data.content.find(function(b){return b.type==='text';});
+      raw = raw ? raw.text : '{}';
+      var obj;
+      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+      catch(e) { fail++; i++; setTimeout(next, 600); return; }
 
-        applyCarePlanResponse(entry, obj, payload);
+      var planJson = JSON.stringify(obj);
+      var nowIso = new Date().toISOString();
+      entry.carePlan = planJson;
+      entry.carePlanAt = nowIso;
+      var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
 
-        apiFetch(payload).then(function(){ ok++; }).catch(function(){ fail++; }).then(function(){
-          i++; setTimeout(next, 600);
+      var wSugg = parseInt(obj.wateringIntervalWeeks);
+      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
+      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
+        entry.wateringIntervalWeeks = String(wSugg);
+        payload.wateringIntervalWeeks = String(wSugg);
+      }
+      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
+        entry.fertilizingIntervalWeeks = String(fSugg);
+        payload.fertilizingIntervalWeeks = String(fSugg);
+      }
+
+      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
+        entry.fertilizerId = obj.fertilizerId;
+        payload.fertilizerId = obj.fertilizerId;
+      }
+
+      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
+      var validDoses = ['voll','halb','viertel','aussetzen'];
+      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
+        entry.fertDoseGrowth = obj.fertDoseGrowth;
+        payload.fertDoseGrowth = obj.fertDoseGrowth;
+      }
+      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
+        entry.fertDoseDormant = obj.fertDoseDormant;
+        payload.fertDoseDormant = obj.fertDoseDormant;
+      }
+      var gms = parseInt(obj.growthMonthStart);
+      var gme = parseInt(obj.growthMonthEnd);
+      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
+        entry.growthMonthStart = String(gms);
+        payload.growthMonthStart = String(gms);
+      }
+      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
+        entry.growthMonthEnd = String(gme);
+        payload.growthMonthEnd = String(gme);
+      }
+
+      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
+        var validEvents = obj.seasonalEvents.filter(function(e){
+          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+        }).map(function(e){
+          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
         });
-      })
-      .catch(function(){
-        fail++; i++; setTimeout(next, 600);
+        if (validEvents.length > 0) {
+          var serialized = serializeEvents(validEvents);
+          entry.seasonalEvents = serialized;
+          payload.seasonalEvents = serialized;
+        }
+      }
+
+      apiFetch(payload).then(function(){ ok++; }).catch(function(){ fail++; }).then(function(){
+        i++; setTimeout(next, 600);
       });
+    }).catch(function(){
+      fail++; i++; setTimeout(next, 600);
+    });
   }
   next();
 }
@@ -2732,36 +2849,64 @@ function refreshCarePlanInModal() {
       '<span class="ldots" style="font-size:14px;color:var(--muted)">Pflegeplan wird erstellt</span>'+
     '</div>';
 
-  var hasFerts = activeFerts().length > 0;
-  var prompt = buildCarePlanPrompt(p.name, buildMixCtx(p), hasFerts);
+  var subTxt = activeSubs().map(function(s,i){return 'Produkt '+(i+1)+': '+s.name+(s.leer?' (Restbestand)':'')+' - '+s.desc;}).join('\n');
+  var mr = parseMix(p.subMix);
+  var ctx = mr.length > 0
+    ? '\nAktueller Mix: '+mr.map(function(r){var i=si(r.subId);return r.pct+'% '+(i>=0?SUBS[i].name:r.subId);}).join(', ')+'.'
+    : '\nSubstrat: '+(SUBS[si(p.subId)]?SUBS[si(p.subId)].name:'?')+'.';
+  var availFerts = activeFerts();
+  var fertTxt = availFerts.length > 0
+    ? '\n\nVerfuegbare Duenger:\n' + availFerts.map(function(f){
+        var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+        return f.id + ': ' + f.name + ' [Kategorie: '+f.category+' = '+cat.label+']'+(f.leer?' (Restbestand - bevorzugen)':'')+' - ' + (f.desc||'');
+      }).join('\n')
+    : '';
+  var todayIso = toIsoDate(new Date());
 
-  fetch('https://api.anthropic.com/v1/messages', carePlanFetchOpts(prompt))
-    .then(function(r){return r.json();})
-    .then(function(data){
-      var raw = data.content && data.content.find(function(b){return b.type==='text';});
-      raw = raw ? raw.text : '{}';
-      var obj;
-      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-      catch(e) { showCareError('Antwort konnte nicht verarbeitet werden.'); return; }
+  var prompt = 'Pflegeplan fuer Zimmerpflanze: '+p.name+ctx+'\n\nProdukte:\n'+subTxt+fertTxt+'\n\n'+
+    'Heute ist der '+todayIso+'.\n\n'+
+    'Antworte NUR mit JSON:\n'+
+    '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
+    '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
+    (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+    '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
+    '2-3 Saetze je Pflege-Feld auf Deutsch.'+
+    (availFerts.length>0 ? ' fertilizerId: ID eines passenden Duengers oder leer wenn keiner passt.' : '');
 
-      var planJson = JSON.stringify(obj);
-      var nowIso = new Date().toISOString();
-      p.carePlan = planJson;
-      p.carePlanAt = nowIso;
-      var payload = {action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso};
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { showCareError('Antwort konnte nicht verarbeitet werden.'); return; }
 
-      var gridDirty = applyCarePlanResponse(p, obj, payload);
+    var planJson = JSON.stringify(obj);
+    var nowIso = new Date().toISOString();
+    p.carePlan = planJson;
+    p.carePlanAt = nowIso;
+    var payload = {action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso};
 
-      apiFetch(payload).catch(function(){
-        toast('Pflegeplan konnte nicht gespeichert werden');
-      });
-      toast('Pflegeplan aktualisiert');
-      renderDetailCare(p);
-      if (gridDirty) { renderGrid(); }
-    })
-    .catch(function(err){
-      showCareError('API-Fehler: '+(err.message||'Unbekannt'));
+    // fertilizerId nur uebernehmen wenn entry-Feld leer (User-Wahl > KI)
+    var fertChanged = false;
+    if (obj.fertilizerId && !p.fertilizerId && fertById(obj.fertilizerId)) {
+      p.fertilizerId = obj.fertilizerId;
+      payload.fertilizerId = obj.fertilizerId;
+      fertChanged = true;
+    }
+
+    apiFetch(payload).catch(function(){
+      toast('Pflegeplan konnte nicht gespeichert werden');
     });
+    toast('Pflegeplan aktualisiert');
+    renderDetailCare(p);
+    if (fertChanged) { renderGrid(); }
+  }).catch(function(err){
+    showCareError('API-Fehler: '+(err.message||'Unbekannt'));
+  });
 }
 
 function showCareError(msg) {
@@ -2834,17 +2979,17 @@ function renderRepotModal(p) {
     if (nutrientWeeks <= 0) {
       nutrientInfoHtml =
         '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
-          '🌱 Mineralisches Substrat - keine Vordüngung. Düngen kann nach Pflegeplan starten.'+
+          '🌱 Mineralisches Substrat - keine Vorduengung. Duengen kann nach Pflegeplan starten.'+
         '</div>';
     } else if (isNaN(fertInterval) || fertInterval === 0) {
       nutrientInfoHtml =
         '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
-          '🌱 Substrat enthält ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Nährstoffe. Pflanze hat aber kein Düngeintervall - keine Auswirkung.'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe. Pflanze hat aber kein Duengeintervall - keine Auswirkung.'+
         '</div>';
     } else if (nutrientWeeks <= fertInterval) {
       nutrientInfoHtml =
         '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted);line-height:1.5">'+
-          '🌱 Substrat enthält ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Nährstoffe (≤ Düngeintervall '+fertInterval+'W). Düngen startet planmäßig.'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe (≤ Duengeintervall '+fertInterval+'W). Duengen startet planmaessig.'+
         '</div>';
     } else {
       var pauseWeeks = nutrientWeeks - fertInterval;
@@ -2853,8 +2998,8 @@ function renderRepotModal(p) {
       firstFert = snapToWednesday(firstFert);
       nutrientInfoHtml =
         '<div class="repot-nutrient-info" style="margin-top:10px;padding:8px 12px;background:var(--gl);border-radius:6px;font-size:12px;color:var(--g1);line-height:1.5;border-left:3px solid var(--g3)">'+
-          '🌱 Substrat enthält ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Nährstoffe. '+
-          '<strong>Düngepause '+(Math.round(pauseWeeks*10)/10)+' Wochen</strong> - erste Düngung ca. '+esc(fmtDate(firstFert))+'.'+
+          '🌱 Substrat enthaelt ~'+(Math.round(nutrientWeeks*10)/10)+' Wochen Naehrstoffe. '+
+          '<strong>Duengepause '+(Math.round(pauseWeeks*10)/10)+' Wochen</strong> - erste Duengung ca. '+esc(fmtDate(firstFert))+'.'+
         '</div>';
     }
   }
@@ -3041,7 +3186,10 @@ function saveRepot() {
 }
 
 function showPanel(name,btn){
-  document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('on');});
+  // Tab-Highlight nur im aktiven Tab-Container zuruecksetzen
+  var activeContainer = MODE === 'indoor' ? 'nav-tabs-indoor' : 'nav-tabs-outdoor';
+  var tabs = document.querySelectorAll('#' + activeContainer + ' .nav-tab');
+  tabs.forEach(function(t){t.classList.remove('on');});
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   btn.classList.add('on');
   document.getElementById('panel-'+name).classList.add('on');
@@ -3313,6 +3461,8 @@ function saveFertAssign() {
 }
 
 (function boot(){
+  loadMode();
+  applyMode();
   renderSubList();
   if (loadCfg()){
     document.getElementById('cfg-url').value=cfg.url;
