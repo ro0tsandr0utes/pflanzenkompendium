@@ -365,6 +365,18 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .detail-event-row.active .detail-event-date { color: var(--g1); font-weight: 500; }
 .detail-event-text { flex: 1; }
+.recur-pill {
+  display: inline-block;
+  font-size: 11px; font-weight: 500;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border-l);
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 4px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 
 .detail-fold {
   border: 1px solid var(--border-l);
@@ -995,8 +1007,10 @@ function isCareDay() {
 }
 
 // === Saisonale Events ===
-// Format im Sheet: "YYYY-MM-DD:Text|YYYY-MM-DD:Text"
+// Format im Sheet: "YYYY-MM-DD:Text|YYYY-MM-DD:Text:RecurYears"
 // Trennzeichen | zwischen Events, : nach dem Datum (erstes :, der Rest gehoert zum Text).
+// Optional: hinten am Chunk ":N" (N = 2..99) als Wiederholungs-Intervall in Jahren.
+// Ohne Suffix oder mit :1 -> jaehrlich (Default, Indoor-kompatibel).
 function parseEvents(str) {
   if (!str || !str.trim()) return [];
   return str.split('|').map(function(chunk) {
@@ -1004,13 +1018,26 @@ function parseEvents(str) {
     var idx = chunk.indexOf(':');
     if (idx < 0) return null;
     var date = chunk.substring(0, idx).trim();
-    var text = chunk.substring(idx + 1).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !text) return null;
-    return {date: date, text: text};
+    var rest = chunk.substring(idx + 1).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rest) return null;
+    // Optionalen recurYears-Suffix vom Ende her abtrennen: ":N" mit N=2..99.
+    // Konservativ: nur akzeptieren wenn vor dem :N noch Text uebrig bleibt.
+    var recurYears = 1;
+    var text = rest;
+    var m = rest.match(/^(.+):([1-9][0-9]?)$/);
+    if (m && m[1].trim()) {
+      text = m[1].trim();
+      recurYears = parseInt(m[2], 10);
+    }
+    return {date: date, text: text, recurYears: recurYears};
   }).filter(function(e){return e;});
 }
 function serializeEvents(events) {
-  return events.map(function(e){return e.date+':'+e.text;}).join('|');
+  return events.map(function(e){
+    var n = parseInt(e.recurYears, 10);
+    var suffix = (n && n > 1) ? (':' + n) : '';
+    return e.date + ':' + e.text + suffix;
+  }).join('|');
 }
 // Aktiv = Eventdatum liegt im aktuellen Pflegefenster
 // (letzter Mittwoch <= Eventdatum < naechster Mittwoch)
@@ -1020,10 +1047,14 @@ function isEventActive(ev) {
   var winEnd = nextWednesday(new Date());
   return daysBetween(eDate, winStart) >= 0 && daysBetween(winEnd, eDate) > 0;
 }
-function plusOneYear(isoDate) {
+function addYears(isoDate, n) {
   var parts = isoDate.split('-');
-  return (parseInt(parts[0]) + 1) + '-' + parts[1] + '-' + parts[2];
+  var years = parseInt(n, 10);
+  if (!years || years < 1) years = 1;
+  return (parseInt(parts[0]) + years) + '-' + parts[1] + '-' + parts[2];
 }
+// Behalten als duenner Wrapper - falls noch von irgendwo referenziert
+function plusOneYear(isoDate) { return addYears(isoDate, 1); }
 
 // Faelligkeit fuer eine Pflanze + Aktionstyp ('water' | 'fertilize')
 // Rueckgabe: {tracked, due, overdue, dueDate, weeksOverdue}
@@ -1411,13 +1442,15 @@ function renderCalendarPanel() {
       var isActive = daysBetween(e.dateObj, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, e.dateObj) > 0;
       var rowCls = isActive ? 'cal-row active' : 'cal-row';
       var dayLabel = e.dateObj.toLocaleDateString('de-DE', {weekday:'short', day:'2-digit'});
+      var rec = parseInt(e.recurYears, 10) || 1;
+      var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
       return '<div class="'+rowCls+'">'+
         '<span class="cal-day">'+esc(dayLabel)+'</span>'+
         '<div class="cal-text">'+
           '<strong>'+esc(e.plantName)+'</strong>'+
           '<div class="cal-event-text">'+esc(e.text)+'</div>'+
         '</div>'+
-        '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓</button>'+
+        '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓</button>'+
       '</div>';
     }).join('');
     return '<div class="cal-month"><h3 class="cal-month-label">'+esc(g.label)+'</h3>'+rows+'</div>';
@@ -1435,13 +1468,13 @@ function countDue() {
 }
 
 function activeEvents() {
-  // Liefert flache Liste {plantId, plantName, date, text} fuer alle aktiven Events
+  // Liefert flache Liste {plantId, plantName, date, text, recurYears} fuer alle aktiven Events
   var out = [];
   plants.forEach(function(p) {
     var evs = parseEvents(p.seasonalEvents);
     evs.forEach(function(ev) {
       if (isEventActive(ev)) {
-        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text});
+        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text, recurYears: ev.recurYears});
       }
     });
   });
@@ -1462,7 +1495,7 @@ function upcomingEvents(months, includeActive) {
     evs.forEach(function(ev) {
       var eDate = dayStart(new Date(ev.date));
       if (daysBetween(eDate, start) >= 0 && daysBetween(end, eDate) > 0) {
-        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text, dateObj: eDate});
+        out.push({plantId: p.id, plantName: p.name, date: ev.date, text: ev.text, recurYears: ev.recurYears, dateObj: eDate});
       }
     });
   });
@@ -1473,12 +1506,15 @@ function upcomingEvents(months, includeActive) {
 function renderEventsBlock(events) {
   if (!events.length) return '';
   var rows = events.map(function(e) {
+    var rec = parseInt(e.recurYears, 10) || 1;
+    var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
+    var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
-        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+
+        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+recPill+
       '</div>'+
-      '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="Auf nächstes Jahr verschieben">✓ Erledigt</button>'+
+      '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
     '</div>';
   }).join('');
   return '<details class="care-events-fold"><summary>🍂 '+events.length+' '+
@@ -1729,7 +1765,7 @@ function markCare(id, type) {
   });
 }
 
-// Saisonales Event als erledigt markieren -> Datum +1 Jahr
+// Saisonales Event als erledigt markieren -> Datum + recurYears Jahre (Default 1)
 function markEventDone(plantId, eventDate) {
   var p = plants.find(function(x){return x.id===plantId;});
   if (!p) return;
@@ -1740,9 +1776,13 @@ function markEventDone(plantId, eventDate) {
   }
   if (idx < 0) return;
   var prev = p.seasonalEvents;
-  events[idx].date = plusOneYear(events[idx].date);
+  var n = parseInt(events[idx].recurYears, 10) || 1;
+  events[idx].date = addYears(events[idx].date, n);
   var newStr = serializeEvents(events);
   p.seasonalEvents = newStr;
+  var msgOk = n > 1
+    ? ('Event auf ' + events[idx].date.substring(0,4) + ' verschoben (alle ' + n + ' Jahre)')
+    : 'Event auf nächstes Jahr verschoben';
   apiFetch({action:'update', id:plantId, seasonalEvents:newStr}).then(function(res){
     if (!res.ok) {
       p.seasonalEvents = prev;
@@ -1750,7 +1790,7 @@ function markEventDone(plantId, eventDate) {
       renderBanner(); renderCalendarPanel();
       return;
     }
-    toast('Event auf nächstes Jahr verschoben');
+    toast(msgOk);
     renderBanner(); renderCalendarPanel();
   }).catch(function(){
     p.seasonalEvents = prev;
@@ -2678,9 +2718,11 @@ function renderDetailInfo(p) {
     var rows = allEvents.map(function(ev){
       var eDate = dayStart(new Date(ev.date));
       var isActive = daysBetween(eDate, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, eDate) > 0;
+      var rec = parseInt(ev.recurYears, 10) || 1;
+      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
       return '<div class="detail-event-row'+(isActive?' active':'')+'">'+
         '<span class="detail-event-date">'+esc(fmtDate(ev.date))+'</span>'+
-        '<span class="detail-event-text">'+esc(ev.text)+'</span>'+
+        '<span class="detail-event-text">'+esc(ev.text)+recPill+'</span>'+
       '</div>';
     }).join('');
     eventsHtml =
