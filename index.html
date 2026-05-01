@@ -1161,6 +1161,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <button class="btn primary" onclick="openOutdoorAddForm()">+ Pflanze</button>
     </div>
 
+    <div class="care-banner" id="op-banner" style="display:none"></div>
+
     <div class="form-panel" id="op-form-panel" style="display:none">
       <div class="form-row">
         <div class="form-group" style="flex:2;min-width:180px">
@@ -4311,7 +4313,193 @@ function nextEventForPlant(p) {
   return future.length ? future[0] : null;
 }
 
+// Bevorstehende Events einer Outdoor-Pflanze, sortiert nach Datum.
+// Im Gegensatz zu nextEventForPlant ohne Mittwochs-Cutoff:
+// faellt nur Events raus, deren Datum vor heute liegt.
+// limit: max. Anzahl der zurueckgegebenen Events (Default 4 = 1 Hauptevent + 3 weitere).
+function outdoorEventsForPlant(p, limit) {
+  if (typeof limit !== 'number') limit = 4;
+  var evs = parseEvents(p.seasonalEvents);
+  if (!evs.length) return [];
+  var today = dayStart(new Date());
+  var future = evs.map(function(e) {
+    return {date:e.date, text:e.text, recurYears:e.recurYears, dateObj: dayStart(new Date(e.date))};
+  }).filter(function(e){
+    return daysBetween(e.dateObj, today) >= 0;
+  }).sort(function(a,b){return a.dateObj - b.dateObj;});
+  return future.slice(0, limit);
+}
+
+// Flache Liste aller Outdoor-Events in einem Datums-Range, sortiert nach Datum.
+// start, end: Date-Objekte. Inklusive start, exklusive end.
+// Liefert {plantId, plantName, zoneId, date, text, recurYears, dateObj}.
+function outdoorEventsInRange(start, end) {
+  var s = dayStart(start);
+  var e = dayStart(end);
+  var out = [];
+  outdoorPlants.forEach(function(p) {
+    var evs = parseEvents(p.seasonalEvents);
+    evs.forEach(function(ev) {
+      var eDate = dayStart(new Date(ev.date));
+      if (daysBetween(eDate, s) >= 0 && daysBetween(e, eDate) > 0) {
+        out.push({
+          plantId: p.id, plantName: p.name, zoneId: p.zoneId,
+          date: ev.date, text: ev.text, recurYears: ev.recurYears, dateObj: eDate
+        });
+      }
+    });
+  });
+  out.sort(function(a,b){return a.dateObj - b.dateObj;});
+  return out;
+}
+
+// Ueberfaellige Outdoor-Events: Datum < heute, sortiert nach Datum (aelteste zuerst).
+function outdoorOverdueEvents() {
+  var today = dayStart(new Date());
+  var out = [];
+  outdoorPlants.forEach(function(p) {
+    var evs = parseEvents(p.seasonalEvents);
+    evs.forEach(function(ev) {
+      var eDate = dayStart(new Date(ev.date));
+      if (daysBetween(eDate, today) < 0) {
+        out.push({
+          plantId: p.id, plantName: p.name, zoneId: p.zoneId,
+          date: ev.date, text: ev.text, recurYears: ev.recurYears, dateObj: eDate
+        });
+      }
+    });
+  });
+  out.sort(function(a,b){return a.dateObj - b.dateObj;});
+  return out;
+}
+
+// Outdoor-Event als erledigt markieren -> Datum + recurYears Jahre verschieben.
+// Analog zu markEventDone (Indoor), aber auf outdoorPlants und ueber updateOutdoorPlant.
+function markOutdoorEventDone(plantId, eventDate) {
+  var p = outdoorPlants.find(function(x){return x.id===plantId;});
+  if (!p) return;
+  var events = parseEvents(p.seasonalEvents);
+  var idx = -1;
+  for (var i = 0; i < events.length; i++) {
+    if (events[i].date === eventDate) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  var prev = p.seasonalEvents;
+  var n = parseInt(events[idx].recurYears, 10) || 1;
+  events[idx].date = addYears(events[idx].date, n);
+  var newStr = serializeEvents(events);
+  p.seasonalEvents = newStr;
+  var msgOk = n > 1
+    ? ('Event auf ' + events[idx].date.substring(0,4) + ' verschoben (alle ' + n + ' Jahre)')
+    : 'Event auf nächstes Jahr verschoben';
+  apiFetch({action:'updateOutdoorPlant', id:plantId, seasonalEvents:newStr}).then(function(res){
+    if (!res.ok) {
+      p.seasonalEvents = prev;
+      toast('Fehler: '+(res.error||'?'));
+      renderOutdoorBanner(); renderOutdoorGrid(); renderOutdoorTimeline();
+      return;
+    }
+    toast(msgOk);
+    renderOutdoorBanner(); renderOutdoorGrid(); renderOutdoorTimeline();
+  }).catch(function(){
+    p.seasonalEvents = prev;
+    toast('Verbindungsfehler');
+    renderOutdoorBanner(); renderOutdoorGrid(); renderOutdoorTimeline();
+  });
+}
+
+function renderOutdoorTimeline() {
+  // Stub fuer markOutdoorEventDone-Aufrufe wenn Tab nicht offen.
+  // Vollimplementierung folgt mit Zeitleiste-Tab.
+  var panel = document.getElementById('panel-out-zeitleiste');
+  if (!panel || !panel.classList.contains('on')) return;
+}
+
+function renderOutdoorBanner() {
+  var banner = document.getElementById('op-banner');
+  if (!banner) return;
+
+  var today = dayStart(new Date());
+  var weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() + 7);   // heute +7 (exklusiv) = "diese Woche"
+  var monthEnd = new Date(today);
+  monthEnd.setDate(monthEnd.getDate() + 28); // heute +28 (exklusiv) = "naechste 4 Wochen"
+
+  var thisWeek = outdoorEventsInRange(today, weekEnd);
+  var nextFour = outdoorEventsInRange(today, monthEnd); // enthaelt thisWeek
+  var overdue  = outdoorOverdueEvents();
+
+  // Banner aus, wenn weder ueberfaellig noch in den naechsten 4 Wochen was ansteht
+  if (overdue.length === 0 && nextFour.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  // Header-Style: today (gruen) wenn diese Woche was ansteht oder ueberfaellig, sonst soon (neutral)
+  var hasUrgent = (thisWeek.length > 0) || (overdue.length > 0);
+  banner.className = 'care-banner ' + (hasUrgent ? 'today' : 'soon');
+
+  // Header-Text
+  var icon = hasUrgent ? '🌿' : '📅';
+  var headerParts = [];
+  if (overdue.length > 0) {
+    headerParts.push('<strong>'+overdue.length+' überfällig.</strong>');
+  }
+  if (thisWeek.length > 0) {
+    headerParts.push('<strong>Diese Woche: '+thisWeek.length+'</strong>');
+    if (nextFour.length > thisWeek.length) {
+      headerParts.push('· Nächste 4 Wochen: '+nextFour.length);
+    }
+  } else if (nextFour.length > 0) {
+    headerParts.push('Diese Woche nichts. Nächste 4 Wochen: <strong>'+nextFour.length+'</strong>');
+  }
+
+  var headerHtml =
+    '<div class="care-banner-row">'+
+      '<div class="care-banner-icon">'+icon+'</div>'+
+      '<div class="care-banner-text">'+headerParts.join(' ')+'</div>'+
+    '</div>';
+
+  // Top-3-Liste: zuerst alle ueberfaelligen (sortiert), dann Naechste 4 Wochen, ohne Duplikate.
+  // Cap bei 3.
+  var foldEvents = [];
+  for (var i = 0; i < overdue.length && foldEvents.length < 3; i++) foldEvents.push(overdue[i]);
+  for (var j = 0; j < nextFour.length && foldEvents.length < 3; j++) foldEvents.push(nextFour[j]);
+
+  var totalCount = overdue.length + nextFour.length;
+  var foldHtml = renderOutdoorEventsBlock(foldEvents, totalCount);
+
+  banner.innerHTML = headerHtml + foldHtml;
+  banner.style.display = 'flex';
+}
+
+// Render eines aufklappbaren Event-Blocks fuer den Banner.
+// events: max. 3 Eintraege fuer die Anzeige.
+// totalCount: Gesamtzahl im Topf (fuer "X Events" im Summary).
+function renderOutdoorEventsBlock(events, totalCount) {
+  if (!events.length) return '';
+  var rows = events.map(function(e) {
+    var rec = parseInt(e.recurYears, 10) || 1;
+    var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
+    var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
+    return '<div class="care-event">'+
+      '<div class="care-event-text">'+
+        '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
+        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+recPill+
+      '</div>'+
+      '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
+    '</div>';
+  }).join('');
+  var summaryLabel = totalCount + ' ' + (totalCount === 1 ? 'Event' : 'Events');
+  if (events.length < totalCount) {
+    summaryLabel += ' insgesamt — Top ' + events.length + ' anzeigen';
+  }
+  return '<details class="care-events-fold" open><summary>🍂 '+summaryLabel+'</summary>'+
+    '<div class="care-events">'+rows+'</div></details>';
+}
+
 function renderOutdoorGrid() {
+  renderOutdoorBanner();
   var grid = document.getElementById('op-grid');
   var empty = document.getElementById('op-empty');
   var srch = (document.getElementById('op-srch').value || '').toLowerCase().trim();
