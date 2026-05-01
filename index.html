@@ -531,6 +531,36 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .weather-banner-line + .weather-banner-line { margin-top: 2px; }
 .weather-banner-line.muted { color: var(--muted); font-size: 12px; }
 
+/* Pflanzplatz-Vorschlag (Phase O6) */
+.zone-suggest-loading {
+  font-size: 12px; color: var(--muted);
+  padding: 8px 0;
+}
+.zone-suggest-card {
+  background: var(--gl);
+  border: 1px solid var(--g3);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.zone-suggest-name {
+  font-weight: 500; color: var(--g1);
+  margin-bottom: 2px;
+}
+.zone-suggest-reason {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.zone-suggest-actions {
+  display: flex; gap: 6px;
+}
+.zone-suggest-err {
+  font-size: 12px; color: var(--danger);
+  padding: 6px 0;
+}
+
 /* Outdoor-Zeitleiste (Phase O4) */
 .tl-toolbar {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -1296,6 +1326,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
         <div class="form-group" style="max-width:240px">
           <label class="form-label">Bereich</label>
           <select class="form-select" id="op-f-zone"></select>
+          <button type="button" class="act-btn" id="op-suggest-zone-btn" onclick="suggestOutdoorZone()" style="margin-top:6px">💡 Bereich vorschlagen</button>
+          <div id="op-zone-suggestions" style="display:none;margin-top:8px"></div>
         </div>
       </div>
       <div class="form-row" style="margin-bottom:.5rem">
@@ -5393,6 +5425,126 @@ function renderOutdoorCard(p) {
 
 // === Add/Edit-Form ===
 
+// KI-gestuetzter Pflanzplatz-Vorschlag (Phase O6).
+// Liest Name + Kategorie aus dem Outdoor-Form und fragt die KI, welche 1-2 Bereiche passen.
+// Bereich-Eigenschaften (orientation, sun, soil, irrigationGroup, notes) gehen in den Prompt.
+function suggestOutdoorZone() {
+  var name = document.getElementById('op-f-name').value.trim();
+  var category = document.getElementById('op-f-category').value;
+  var notes = document.getElementById('op-f-notes').value.trim();
+  var box = document.getElementById('op-zone-suggestions');
+  var btn = document.getElementById('op-suggest-zone-btn');
+
+  if (!name) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Erst einen Pflanzennamen eingeben.</div>';
+    document.getElementById('op-f-name').focus();
+    return;
+  }
+  if (!cfg.key) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Kein API-Key hinterlegt — Vorschlag nicht möglich.</div>';
+    return;
+  }
+
+  var availableZones = ZONES.filter(function(z){return z.active !== 'false';});
+  if (!availableZones.length) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Keine aktiven Bereiche vorhanden.</div>';
+    return;
+  }
+
+  // Loading-State
+  btn.disabled = true;
+  btn.textContent = 'KI denkt nach…';
+  box.style.display = 'block';
+  box.innerHTML = '<div class="zone-suggest-loading"><span class="ldots">Suche passende Bereiche</span></div>';
+
+  // Bereich-Beschreibung fuer Prompt
+  var zoneList = availableZones.map(function(z) {
+    var parts = [];
+    if (z.category) parts.push('Typ: ' + (ZONE_CAT_LABELS[z.category] || z.category));
+    if (z.orientation) parts.push('Ausrichtung: ' + z.orientation);
+    if (z.sun) parts.push('Sonne: ' + (ZONE_SUN_LABELS[z.sun] || z.sun));
+    if (z.soil) parts.push('Boden: ' + z.soil);
+    if (z.irrigationGroup) parts.push('Bewaesserung: ' + (ZONE_IRR_GROUP_LABELS[z.irrigationGroup] || z.irrigationGroup));
+    if (z.areaM2) parts.push('Flaeche: ' + z.areaM2 + ' m2');
+    if (z.notes) parts.push('Hinweise: ' + z.notes);
+    return z.id + ' - ' + z.name + ' (' + parts.join(', ') + ')';
+  }).join('\n');
+
+  var ctx = '';
+  if (category) ctx += '\nKategorie: ' + category;
+  if (notes) ctx += '\nNotizen: ' + notes;
+
+  var prompt =
+    'Du bist Garten-Experte fuer Brandenburg (Klimazone 7a, Sandboden ueblich). ' +
+    'Eine neue Outdoor-Pflanze soll angelegt werden:\n' +
+    'Name: ' + name + ctx + '\n\n' +
+    'Verfuegbare Bereiche im Garten:\n' + zoneList + '\n\n' +
+    'Aufgabe: Schlage 1-2 Bereiche vor, die fuer diese Pflanze am besten passen. ' +
+    'Beruecksichtige Sonnenbedarf, Bodenanspruch, Winterhaerte, Wuchsform und vorhandene Bewaesserung. ' +
+    'Wenn keiner der Bereiche wirklich passt, gib trotzdem den am wenigsten ungeeigneten an mit klarer Begruendung warum es kein guter Standort ist.\n\n' +
+    'Antworte NUR mit JSON:\n' +
+    '{"suggestions":[{"zoneId":"z1","reason":"halbschattig, kalkarm, passt zu Hortensie"},{"zoneId":"z3","reason":"..."}]}';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:1500, system:'Garten-Experte Brandenburg. Nur valides JSON, keine Backticks.', messages:[{role:'user', content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data) {
+    btn.disabled = false;
+    btn.textContent = '💡 Bereich vorschlagen';
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) {
+      box.innerHTML = '<div class="zone-suggest-err">KI-Antwort konnte nicht verarbeitet werden.</div>';
+      return;
+    }
+    if (!obj.suggestions || !Array.isArray(obj.suggestions) || obj.suggestions.length === 0) {
+      box.innerHTML = '<div class="zone-suggest-err">Kein Vorschlag erhalten.</div>';
+      return;
+    }
+    renderZoneSuggestions(obj.suggestions);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = '💡 Bereich vorschlagen';
+    box.innerHTML = '<div class="zone-suggest-err">Verbindungsfehler bei KI-Anfrage.</div>';
+  });
+}
+
+function renderZoneSuggestions(suggestions) {
+  var box = document.getElementById('op-zone-suggestions');
+  // Validieren: nur Eintraege mit existierender zoneId
+  var valid = suggestions.filter(function(s) {
+    return s.zoneId && ZONES.some(function(z){return z.id === s.zoneId;});
+  });
+  if (!valid.length) {
+    box.innerHTML = '<div class="zone-suggest-err">Vorschlag enthielt keine bekannten Bereiche.</div>';
+    return;
+  }
+  box.innerHTML = valid.map(function(s) {
+    var z = ZONES.find(function(x){return x.id === s.zoneId;});
+    return '<div class="zone-suggest-card">'+
+      '<div class="zone-suggest-name">'+esc(z.name)+'</div>'+
+      '<div class="zone-suggest-reason">'+esc(s.reason || '')+'</div>'+
+      '<div class="zone-suggest-actions">'+
+        '<button type="button" class="act-btn" onclick="applyZoneSuggestion(\''+esc(s.zoneId)+'\')">Übernehmen</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function applyZoneSuggestion(zoneId) {
+  document.getElementById('op-f-zone').value = zoneId;
+  var box = document.getElementById('op-zone-suggestions');
+  box.style.display = 'none';
+  box.innerHTML = '';
+  toast('Bereich übernommen');
+}
+
 function openOutdoorAddForm() {
   outdoorEditId = null;
   populateOutdoorZoneSelect();
@@ -5408,6 +5560,9 @@ function openOutdoorAddForm() {
   document.getElementById('op-err').textContent = '';
   document.getElementById('op-delete-btn').style.display = 'none';
   document.getElementById('op-save-btn').textContent = 'Anlegen';
+  // Pflanzplatz-Vorschlag-Container leeren (Phase O6)
+  var sugBox = document.getElementById('op-zone-suggestions');
+  if (sugBox) { sugBox.style.display = 'none'; sugBox.innerHTML = ''; }
   document.getElementById('op-form-panel').style.display = 'block';
   document.getElementById('op-f-name').focus();
 }
@@ -5429,6 +5584,9 @@ function openOutdoorEditForm(plantId) {
   document.getElementById('op-err').textContent = '';
   document.getElementById('op-delete-btn').style.display = 'inline-flex';
   document.getElementById('op-save-btn').textContent = 'Speichern';
+  // Pflanzplatz-Vorschlag-Container leeren (Phase O6)
+  var sugBox = document.getElementById('op-zone-suggestions');
+  if (sugBox) { sugBox.style.display = 'none'; sugBox.innerHTML = ''; }
   document.getElementById('op-form-panel').style.display = 'block';
   document.getElementById('op-f-name').focus();
 }
