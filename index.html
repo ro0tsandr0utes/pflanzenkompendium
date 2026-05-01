@@ -145,6 +145,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   border: 1px solid var(--border); border-radius: 6px;
   cursor: pointer; background: none; font-family: inherit;
   color: var(--muted); transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
 }
 .act-btn:hover      { background: var(--bg); color: var(--text); }
 .act-btn.care:hover { color: var(--g2); border-color: var(--g3); background: var(--gl); }
@@ -1237,7 +1239,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="zone-empty" id="op-empty" style="display:none">
       <div style="font-size:42px;margin-bottom:.5rem">🌳</div>
       <strong>Noch keine Outdoor-Pflanzen.</strong><br>
-      <span class="zone-empty-hint">Lege Pflanzen einzeln an oder warte auf Phase O3 (Migration der Bestandsliste).</span>
+      <span class="zone-empty-hint">Lege Pflanzen einzeln an oder migriere die Bestandsliste.</span><br>
+      <button class="btn" style="margin-top:1rem" onclick="seedOutdoorPlantsUi()">Pflanzen aus Bestandsliste laden</button>
     </div>
   </div>
   <div id="panel-out-bereiche" class="panel">
@@ -4164,6 +4167,43 @@ function seedZonesUi() {
     // Liste neu laden
     zonesLoaded = false;
     openZonesPanel();
+  }).catch(function() {
+    toast('Verbindungsfehler');
+  });
+}
+
+// Migrations-Button im Outdoor-Sammlung Empty-State (Phase O3).
+// Backend legt bei Bedarf z20 "Kuebel-Terrasse" an, schreibt ~85 Pflanzen ins
+// Outdoor-Sheet, extrahiert Heuristik-Events und Future-Pflanz-Vorhaben.
+// Idempotent: liefert 'skipped'-Meldung wenn das Sheet schon Daten enthaelt.
+function seedOutdoorPlantsUi() {
+  if (!confirm('Pflanzen aus deiner Bestandsliste anlegen? ' +
+      'Das ist eine Einmal-Aktion und idempotent — laeuft nur wenn das Outdoor-Sheet leer ist. ' +
+      'Bereiche-Sheet muss vorher mit "Bereiche aus Liste laden" befuellt sein. ' +
+      'Etwa 85 Pflanzen mit Notizen 1:1 aus der Liste, automatisch erkannte Saison-Events und Pflanz-Vorhaben.')) return;
+  apiFetch({action: 'seedOutdoorPlants'}).then(function(res) {
+    if (!res.ok) {
+      toast('Fehler: ' + (res.error || '?'));
+      return;
+    }
+    if (res.data && res.data.skipped) {
+      toast(res.data.skipped);
+      return;
+    }
+    if (res.data && res.data.error) {
+      toast('Fehler: ' + res.data.error);
+      return;
+    }
+    var d = res.data || {};
+    var msg = (d.seeded || 0) + ' Pflanzen angelegt';
+    if (d.eventsExtracted) msg += ', ' + d.eventsExtracted + ' Events erkannt';
+    if (d.plannedFuture) msg += ' (' + d.plannedFuture + ' Pflanzvorhaben)';
+    if (d.z20 === 'angelegt') msg += '. Bereich z20 Kübel-Terrasse neu angelegt';
+    toast(msg);
+    outdoorPlantsLoaded = false;
+    // Auch Bereiche-Cache invalidieren falls z20 neu kam
+    if (typeof zonesLoaded !== 'undefined') zonesLoaded = false;
+    openOutdoorPanel();
   }).catch(function() {
     toast('Verbindungsfehler');
   });
