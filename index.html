@@ -1686,6 +1686,7 @@ function convertSubs(rawSubs) {
       desc: s.desc,
       leer: s.leer === 'true',
       active: s.active === 'true' || s.active === '', // leer = default active
+      removed: s.removed === 'true', // Phase O6: Soft-Delete (aus Bestand entfernt)
       nutrientWeeks: isNaN(nw) ? 0 : nw // Wochen Vorduengung beim Umtopfen
     };
   });
@@ -1737,7 +1738,7 @@ function init() {
 
 function uid() { return 'p'+Date.now()+Math.random().toString(36).slice(2,5); }
 function si(id) { return SUBS.findIndex(function(s){return s.id===id;}); }
-function activeSubs() { return SUBS.filter(function(s){return s.active;}); }
+function activeSubs() { return SUBS.filter(function(s){return s.active && !s.removed;}); }
 function subColor(idx) { return idx >= 0 ? COLORS[idx % COLORS.length] : '#888'; }
 function subBg(idx) { return idx >= 0 ? BGS[idx % BGS.length] : '#eee'; }
 function esc(s) {
@@ -2423,15 +2424,36 @@ function renderSubSelects() {
   }
 }
 
+// Wie oft wird ein Substrat in Indoor-Pflanzen referenziert? (subId + subMix)
+function subUsageCount(subId) {
+  var n = 0;
+  plants.forEach(function(p) {
+    if (p.subId === subId) { n++; return; }
+    var mix = parseMix(p.subMix);
+    if (mix.some(function(r){return r.subId === subId;})) n++;
+  });
+  return n;
+}
+
 function renderSubList() {
   var box = document.getElementById('sub-list');
   if (!SUBS.length) {
     box.innerHTML = '<div class="empty">Keine Substrate geladen.</div>';
     return;
   }
-  box.innerHTML=SUBS.map(function(s,i){
+  // Sortierung: erst nicht-entfernte, dann entfernte (mit Mix-Referenz)
+  var ordered = SUBS.slice().sort(function(a,b) {
+    var ar = a.removed ? 1 : 0, br = b.removed ? 1 : 0;
+    return ar - br;
+  });
+  box.innerHTML = ordered.map(function(s){
+    var i = SUBS.indexOf(s); // Original-Index fuer subColor (haelt Farben stabil)
     var dotColor = subColor(i);
+    var usageN = subUsageCount(s.id);
     var tags = '';
+    if (s.removed) {
+      tags += ' <span class="leer-tag" style="background:#FBE6D6;border-color:#F0C39D;color:#8A4720">🗑 entfernt</span>';
+    }
     if (s.leer) tags += ' <span class="leer-tag">Restbestand</span>';
     if (!s.active) tags += ' <span class="inactive-tag">inaktiv</span>';
     var nw = s.nutrientWeeks || 0;
@@ -2441,16 +2463,35 @@ function renderSubList() {
     } else {
       nwTag = ' <span class="inactive-tag" title="Mineralisches Substrat ohne Vorduengung">mineralisch</span>';
     }
-    return '<div class="sub-item'+(s.active?'':' inactive')+'">'+
+    var usageTag = ' <span class="leer-tag" style="background:#EEF3FB;border-color:#C8D8EE;color:#2E4F84" title="Anzahl Pflanzen mit diesem Substrat (subId oder im Mix)">'+usageN+' '+(usageN===1?'Pflanze':'Pflanzen')+'</span>';
+
+    // Buttons je nach Zustand
+    var buttons = '';
+    if (!s.removed) {
+      buttons +=
+        '<button class="act-btn" onclick="startEditSub(\''+s.id+'\')">Bearbeiten</button>'+
+        '<button class="act-btn" onclick="toggleSubLeer(\''+s.id+'\')">'+(s.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
+        '<button class="act-btn" onclick="toggleSubActive(\''+s.id+'\')">'+(s.active?'Deaktivieren':'Aktivieren')+'</button>'+
+        '<button class="act-btn del" onclick="removeSubFromStock(\''+s.id+'\')">Aus Bestand entfernen</button>';
+    } else {
+      // Entfernt: Reaktivieren oder endgueltig loeschen
+      buttons +=
+        '<button class="act-btn" onclick="restoreSubToStock(\''+s.id+'\')">Wieder in Bestand</button>';
+      if (usageN === 0) {
+        buttons += '<button class="act-btn del" onclick="deleteSubConfirm(\''+s.id+'\')">Endgültig löschen</button>';
+      }
+    }
+
+    var rowClass = 'sub-item';
+    if (!s.active) rowClass += ' inactive';
+    if (s.removed) rowClass += ' inactive'; // optisch dimmen
+
+    return '<div class="'+rowClass+'">'+
       '<div class="sub-dot" style="background:'+dotColor+'"></div>'+
       '<div style="flex:1">'+
-        '<div class="sub-name">'+esc(s.name)+tags+nwTag+'</div>'+
+        '<div class="sub-name">'+esc(s.name)+tags+nwTag+usageTag+'</div>'+
         '<div class="sub-desc">'+esc(s.desc)+'</div>'+
-        '<div class="sub-actions">'+
-          '<button class="act-btn" onclick="startEditSub(\''+s.id+'\')">Bearbeiten</button>'+
-          '<button class="act-btn" onclick="toggleSubLeer(\''+s.id+'\')">'+(s.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
-          '<button class="act-btn" onclick="toggleSubActive(\''+s.id+'\')">'+(s.active?'Deaktivieren':'Aktivieren')+'</button>'+
-        '</div>'+
+        '<div class="sub-actions">'+ buttons +'</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -2569,6 +2610,60 @@ function toggleSubLeer(id) {
   }).catch(function(){ s.leer = !newVal; toast('Verbindungsfehler'); renderSubList(); });
 }
 
+// Substrat aus Bestand entfernen (Soft-Delete, Phase O6).
+// Bleibt in der Liste solange noch Mix-Referenzen existieren, wird aber nicht mehr in
+// activeSubs() (also nicht mehr im Mix-Selector) angezeigt.
+function removeSubFromStock(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  var n = subUsageCount(id);
+  var msg = 'Substrat "' + s.name + '" aus dem Bestand entfernen?\n\n';
+  if (n > 0) {
+    msg += 'Es ist noch in ' + n + ' ' + (n===1?'Pflanze':'Pflanzen') + ' im Einsatz und bleibt deshalb in der Liste sichtbar — markiert als entfernt. Es wird ab sofort nicht mehr in neuen Mixes angeboten.';
+  } else {
+    msg += 'Es ist aktuell in keiner Pflanze im Einsatz und kann danach endgültig gelöscht werden.';
+  }
+  if (!confirm(msg)) return;
+  s.removed = true;
+  apiFetch({action:'updateSub', id:id, removed:'true'}).then(function(res){
+    if (!res.ok) { s.removed = false; toast('Fehler: '+(res.error||'?')); }
+    else toast('Aus Bestand entfernt');
+    renderSubList();
+  }).catch(function(){ s.removed = false; toast('Verbindungsfehler'); renderSubList(); });
+}
+
+// Entferntes Substrat wieder in Bestand zurueckholen.
+function restoreSubToStock(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  s.removed = false;
+  apiFetch({action:'updateSub', id:id, removed:'false'}).then(function(res){
+    if (!res.ok) { s.removed = true; toast('Fehler: '+(res.error||'?')); }
+    else toast('Wieder im Bestand');
+    renderSubList();
+  }).catch(function(){ s.removed = true; toast('Verbindungsfehler'); renderSubList(); });
+}
+
+// Endgueltiges Loeschen eines bereits entfernten Substrats.
+// Geht nur wenn keine Mix-Referenz mehr besteht — UI blendet Button sonst aus,
+// Backend prueft zusaetzlich.
+function deleteSubConfirm(id) {
+  var s = SUBS.find(function(x){return x.id===id;});
+  if (!s) return;
+  if (subUsageCount(id) > 0) {
+    alert('Substrat ist noch in einer Pflanze referenziert — kann nicht endgültig gelöscht werden.');
+    return;
+  }
+  if (!confirm('Substrat "' + s.name + '" endgültig löschen?\n\nDas kann nicht rückgängig gemacht werden.')) return;
+  apiFetch({action:'deleteSub', id:id}).then(function(res){
+    if (!res.ok) { toast('Fehler: '+(res.error||'?')); return; }
+    var idx = SUBS.findIndex(function(x){return x.id===id;});
+    if (idx >= 0) SUBS.splice(idx, 1);
+    toast('Substrat gelöscht');
+    renderSubList();
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+
 // === Duenger-UI ===
 
 // Aktive Duenger filtern.
@@ -2621,6 +2716,7 @@ function renderFertList() {
           reassignBtn+
           '<button class="act-btn" onclick="toggleFertLeer(\''+f.id+'\')">'+(f.leer?'Vollwertig markieren':'Als Restbestand markieren')+'</button>'+
           '<button class="act-btn" onclick="toggleFertActive(\''+f.id+'\')">'+(f.active?'Deaktivieren':'Aktivieren')+'</button>'+
+          '<button class="act-btn del" onclick="deleteFertConfirm(\''+f.id+'\')">Löschen</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -2749,6 +2845,194 @@ function toggleFertLeer(id) {
     else toast(newVal ? 'Als Restbestand markiert' : 'Als vollwertig markiert');
     renderFertList();
   }).catch(function(){ f.leer = !newVal; toast('Verbindungsfehler'); renderFertList(); });
+}
+
+// Loescht einen Duenger nach Confirm.
+// Wenn keine Pflanze den Duenger nutzt: direkter Hard-Delete nach Confirm.
+// Wenn N Pflanzen den Duenger nutzen: Frage "neuer XXX-Duenger bereits hinzugefuegt?".
+//   Bei "Ja": KI ordnet die Pflanzen sequentiell anderen Duengern zu, dann Confirm + Delete.
+//   Bei "Nein": Hinweis erst neuen Duenger anlegen.
+function deleteFertConfirm(id) {
+  var f = fertById(id);
+  if (!f) return;
+  var assignedPlants = plants.filter(function(p){return p.fertilizerId===id;});
+
+  if (assignedPlants.length === 0) {
+    if (!confirm('Dünger "' + f.name + '" endgültig löschen?\n\nDas kann nicht rückgängig gemacht werden.')) return;
+    deleteFertNow(id);
+    return;
+  }
+
+  // Mit Zuweisungen: Cascade-Workflow
+  var cat = FERT_CATS[f.category] || FERT_CATS['universal'];
+  var catLabel = cat.label;
+  var n = assignedPlants.length;
+  var msg = 'Dünger "' + f.name + '" ist noch ' + n + ' ' + (n===1?'Pflanze':'Pflanzen') + ' zugewiesen.\n\n' +
+    'Neuer ' + catLabel + '-Dünger bereits hinzugefügt?\n\n' +
+    'Bei "OK" werden die ' + (n===1?'Pflanze':'Pflanzen') + ' per KI auf andere passende Dünger umgeordnet, danach kannst du löschen.\n' +
+    'Bei "Abbrechen" erst neuen ' + catLabel + '-Dünger anlegen, dann hier nochmal.';
+  if (!confirm(msg)) return;
+
+  reassignFromDeletedFert(id, assignedPlants);
+}
+
+// Hard-Delete-Aufruf ans Backend, ohne weitere Pruefung.
+function deleteFertNow(id) {
+  apiFetch({action:'deleteFert', id:id}).then(function(res){
+    if (!res.ok) {
+      toast('Fehler: '+(res.error||'?'));
+      return;
+    }
+    var idx = FERTS.findIndex(function(x){return x.id===id;});
+    if (idx >= 0) FERTS.splice(idx, 1);
+    toast('Dünger gelöscht');
+    renderFertList();
+  }).catch(function(){
+    toast('Verbindungsfehler');
+  });
+}
+
+// Cascade: KI ordnet alle Pflanzen, die deletedId nutzen, anderen Duengern zu.
+// Nach erfolgreicher Umordnung: Confirm "jetzt loeschen?" und ggf. Hard-Delete.
+function reassignFromDeletedFert(deletedId, candidates) {
+  if (!cfg.key) { toast('Kein API Key hinterlegt — manuelle Umordnung nötig.'); return; }
+  var deletedFert = fertById(deletedId);
+  if (!deletedFert) return;
+
+  // Verfuegbare alternative Duenger: aktive Indoor-Duenger ohne den zu loeschenden
+  var availableFerts = activeFerts('indoor').filter(function(x){return x.id !== deletedId;});
+  if (availableFerts.length === 0) {
+    alert('Es gibt keine anderen aktiven Indoor-Dünger. Bitte erst einen neuen anlegen.');
+    return;
+  }
+
+  toast('KI ordnet ' + candidates.length + ' ' + (candidates.length===1?'Pflanze':'Pflanzen') + ' um…');
+
+  var plantList = candidates.map(function(p) {
+    return p.id + ': ' + p.name + (p.notes ? ' - ' + p.notes : '') +
+      ' | Duenge-Intervall: alle ' + (p.fertilizingIntervalWeeks||'?') + ' Wochen';
+  }).join('\n');
+
+  var fertList = availableFerts.map(function(x) {
+    return x.id + ': ' + x.name + ' [' + x.category + ']' + (x.leer?' [Restbestand]':'') + ' - ' + (x.desc||'');
+  }).join('\n');
+
+  var deletedLine = deletedFert.id + ': ' + deletedFert.name + ' [' + deletedFert.category + '] - ' + (deletedFert.desc||'');
+
+  var prompt =
+    'Du bist Zimmerpflanzen-Duenger-Experte. Ein Duenger soll geloescht werden:\n' +
+    deletedLine + '\n\n' +
+    'Folgende Pflanzen nutzen ihn aktuell und brauchen einen neuen:\n' + plantList + '\n\n' +
+    'Verfuegbare alternative Duenger:\n' + fertList + '\n\n' +
+    'Aufgabe: Weise JEDER Pflanze den am besten passenden alternativen Duenger zu. ' +
+    'Beruecksichtige Kategorien (green=Gruenpflanzen, cacti=Kakteen/Sukkulenten, orchid=Orchideen, flowering=Bluehpflanzen, universal=alles). ' +
+    'Restbestand-Duenger bevorzugen wenn sie passen.\n\n' +
+    'Antworte NUR mit JSON:\n' +
+    '{"assignments":[{"plantId":"p1","newFertId":"d2","reason":"Gruenpflanze - green-Kategorie"},{"plantId":"p7","newFertId":"d3","reason":"..."}]}\n' +
+    'WICHTIG: Es muss fuer jede Pflanze genau eine assignment geben.';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:2000, system:'Zimmerpflanzen-Duengerexperte. Nur valides JSON, keine Backticks.', messages:[{role:'user', content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data) {
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) { toast('KI-Antwort ungültig — Umordnung abgebrochen.'); return; }
+
+    if (!obj.assignments || !Array.isArray(obj.assignments)) {
+      toast('KI-Antwort ungültig — Umordnung abgebrochen.'); return;
+    }
+
+    // Map plantId -> newFertId aus KI-Antwort
+    var aiMap = {};
+    obj.assignments.forEach(function(a) {
+      if (a.plantId && a.newFertId && availableFerts.some(function(x){return x.id===a.newFertId;})) {
+        aiMap[a.plantId] = a.newFertId;
+      }
+    });
+
+    // Pruefen: hat jede Kandidaten-Pflanze einen Vorschlag?
+    var missing = candidates.filter(function(p){return !aiMap[p.id];});
+    if (missing.length > 0) {
+      var missNames = missing.map(function(p){return p.name;}).join(', ');
+      alert('KI konnte für diese Pflanzen keinen passenden Dünger finden:\n' + missNames + '\n\nDünger wird NICHT gelöscht. Bitte manuell zuweisen oder neuen Dünger anlegen.');
+      return;
+    }
+
+    // Sequentiell anwenden, dann Confirm + Delete
+    applyCascadeAndDelete(deletedId, candidates, aiMap);
+  }).catch(function() {
+    toast('Verbindungsfehler bei KI-Anfrage');
+  });
+}
+
+// Wendet die KI-Cascade an: jede Pflanze bekommt aiMap[p.id] zugewiesen.
+// Sequentiell mit kleinem Delay (Sheet-API-Schonung).
+// Nach Erfolg: Confirm fuer den eigentlichen Loeschvorgang.
+function applyCascadeAndDelete(deletedId, candidates, aiMap) {
+  var i = 0, ok = 0, fail = 0;
+  var updatedIds = [];
+  function next() {
+    if (i >= candidates.length) {
+      if (fail > 0) {
+        toast(ok + ' umgeordnet, ' + fail + ' fehlgeschlagen — Dünger NICHT gelöscht.');
+        renderFertList();
+        return;
+      }
+      // Mini-Refresh fuer die "Duengen"-Texte der Pflegeplaene
+      var refreshTargets = updatedIds.filter(function(pid){
+        var pl = plants.find(function(x){return x.id===pid;});
+        return pl && pl.carePlan;
+      });
+      if (refreshTargets.length > 0) {
+        toast(refreshTargets.length + ' Düngen-Texte werden aktualisiert…');
+        var rIdx = 0;
+        function nextRefresh() {
+          if (rIdx >= refreshTargets.length) {
+            confirmFinalDelete();
+            return;
+          }
+          refreshFertText(refreshTargets[rIdx], function() {
+            rIdx++;
+            setTimeout(nextRefresh, 200);
+          });
+        }
+        nextRefresh();
+      } else {
+        confirmFinalDelete();
+      }
+      return;
+    }
+
+    var p = candidates[i];
+    var newFertId = aiMap[p.id];
+    var prev = p.fertilizerId;
+    p.fertilizerId = newFertId;
+    apiFetch({action:'update', id:p.id, fertilizerId:newFertId}).then(function(res){
+      if (res.ok) { ok++; updatedIds.push(p.id); }
+      else { fail++; p.fertilizerId = prev; }
+      i++;
+      setTimeout(next, 150);
+    }).catch(function() {
+      fail++; p.fertilizerId = prev;
+      i++;
+      setTimeout(next, 150);
+    });
+  }
+  function confirmFinalDelete() {
+    var deletedFert = fertById(deletedId);
+    var name = deletedFert ? deletedFert.name : deletedId;
+    if (confirm('Alle ' + ok + ' ' + (ok===1?'Pflanze':'Pflanzen') + ' umgeordnet.\n\nDünger "' + name + '" jetzt löschen?')) {
+      deleteFertNow(deletedId);
+    } else {
+      toast('Dünger nicht gelöscht — bleibt im Bestand.');
+      renderFertList();
+    }
+  }
+  next();
 }
 
 function showLoading(on){document.getElementById('grid-loading').style.display=on?'block':'none';}
