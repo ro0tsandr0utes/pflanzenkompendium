@@ -1467,6 +1467,11 @@ function applyMode() {
   // Indoor-spezifische Status-Anzeige (nav-count) im Outdoor-Modus leer lassen
   var nc = document.getElementById('nav-count');
   if (nc && MODE === 'outdoor') nc.textContent = '';
+  // Outdoor: Daten fuer das initial sichtbare Panel laden, falls App schon konfiguriert ist.
+  // Sonst (Setup-Overlay-Phase): wird spaeter nach saveConfig nachgezogen.
+  if (MODE === 'outdoor' && cfg.url) {
+    openOutdoorPanel();
+  }
 }
 function setMode(m) {
   if (m !== 'indoor' && m !== 'outdoor') return;
@@ -4106,10 +4111,10 @@ function deleteZoneConfirm() {
     }
     if (refs > 0) {
       document.getElementById('z-err').textContent =
-        'Bereich wird von ' + refs + ' Pflanze(n) genutzt - erst dort umhaengen.';
+        'Bereich wird von ' + refs + ' Pflanze(n) genutzt - erst dort umhängen.';
       return;
     }
-    if (!confirm('Bereich "' + z.name + '" wirklich loeschen?')) return;
+    if (!confirm('Bereich "' + z.name + '" wirklich löschen?')) return;
     var btn = document.getElementById('z-delete-btn');
     btn.disabled = true;
     apiFetch({action: 'deleteZone', id: zoneEditId}).then(function(res2) {
@@ -4119,7 +4124,7 @@ function deleteZoneConfirm() {
         return;
       }
       ZONES = ZONES.filter(function(x){return x.id !== zoneEditId;});
-      toast('Bereich geloescht');
+      toast('Bereich gelöscht');
       closeZoneForm();
       renderZoneGrid();
     }).catch(function() {
@@ -4129,14 +4134,14 @@ function deleteZoneConfirm() {
   }).catch(function() {
     // Wenn getOutdoorPlants scheitert: trotzdem Loeschen erlauben (defensiv,
     // aber nicht blockierend - in O1 sind ja eh noch keine Pflanzen da).
-    if (!confirm('Bereich "' + z.name + '" wirklich loeschen?')) return;
+    if (!confirm('Bereich "' + z.name + '" wirklich löschen?')) return;
     apiFetch({action: 'deleteZone', id: zoneEditId}).then(function(res2) {
       if (!res2.ok) {
         document.getElementById('z-err').textContent = 'Fehler: ' + (res2.error || '?');
         return;
       }
       ZONES = ZONES.filter(function(x){return x.id !== zoneEditId;});
-      toast('Bereich geloescht');
+      toast('Bereich gelöscht');
       closeZoneForm();
       renderZoneGrid();
     });
@@ -4145,7 +4150,7 @@ function deleteZoneConfirm() {
 
 // Seed-Button im Empty-State
 function seedZonesUi() {
-  if (!confirm('19 Bereiche aus deiner Liste anlegen? Das laesst sich danach noch bearbeiten.')) return;
+  if (!confirm('19 Bereiche aus deiner Liste anlegen? Das lässt sich danach noch bearbeiten.')) return;
   apiFetch({action: 'seedZones'}).then(function(res) {
     if (!res.ok) {
       toast('Fehler: ' + (res.error || '?'));
@@ -4474,7 +4479,7 @@ function deleteOutdoorPlantConfirm() {
   if (!outdoorEditId) return;
   var p = outdoorPlants.find(function(x){return x.id === outdoorEditId;});
   if (!p) return;
-  if (!confirm('Pflanze "' + p.name + '" wirklich loeschen?')) return;
+  if (!confirm('Pflanze "' + p.name + '" wirklich löschen?')) return;
   var btn = document.getElementById('op-delete-btn');
   btn.disabled = true;
   apiFetch({action: 'deleteOutdoorPlant', id: outdoorEditId}).then(function(res) {
@@ -4484,7 +4489,7 @@ function deleteOutdoorPlantConfirm() {
       return;
     }
     outdoorPlants = outdoorPlants.filter(function(x){return x.id !== outdoorEditId;});
-    toast('Pflanze geloescht');
+    toast('Pflanze gelöscht');
     cancelOutdoorForm();
     renderOutdoorGrid();
   }).catch(function() {
@@ -4566,14 +4571,14 @@ function renderOutdoorDetailInfo(p) {
       var ws = dueStatus(p, 'water');
       careRows.push('<div class="detail-row"><span class="detail-label">Giessen</span>'+
         '<span class="detail-value">alle ' + wW + ' Wochen' +
-        (ws.tracked ? ' · ' + (ws.due ? '<strong>jetzt faellig</strong>' : 'in ' + ws.daysUntil + ' Tagen') : '') +
+        (ws.tracked ? ' · ' + (ws.due ? '<strong>jetzt fällig</strong>' : 'in ' + ws.daysUntil + ' Tagen') : '') +
         '</span></div>');
     }
     if (fW && fW > 0) {
       var fs = dueStatus(p, 'fertilize');
       careRows.push('<div class="detail-row"><span class="detail-label">Duengen</span>'+
         '<span class="detail-value">alle ' + fW + ' Wochen' +
-        (fs.tracked ? ' · ' + (fs.due ? '<strong>jetzt faellig</strong>' : 'in ' + fs.daysUntil + ' Tagen') : '') +
+        (fs.tracked ? ' · ' + (fs.due ? '<strong>jetzt fällig</strong>' : 'in ' + fs.daysUntil + ' Tagen') : '') +
         '</span></div>');
     }
     careInfo = '<div class="detail-section"><div class="detail-label">Wochen-Pflege</div>' + careRows.join('') + '</div>';
@@ -4818,9 +4823,12 @@ function buildZoneContextForPrompt(z) {
 
 (function boot(){
   loadMode();
+  // loadCfg() vor applyMode() damit applyMode() weiss ob die App konfiguriert
+  // ist und Outdoor-Daten direkt laden kann.
+  var hasCfg = loadCfg();
   applyMode();
   renderSubList();
-  if (loadCfg()){
+  if (hasCfg){
     document.getElementById('cfg-url').value=cfg.url;
     document.getElementById('overlay').classList.add('hidden');
     init();
