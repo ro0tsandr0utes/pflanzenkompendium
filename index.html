@@ -1130,6 +1130,78 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   </div>
 </div>
 
+<!-- Bewaesserungs-Kreislauf-Edit-Modal (Phase O8) -->
+<div class="overlay hidden" id="circuit-overlay" onclick="if(event.target===this)closeCircuitForm()">
+  <div class="setup-card" style="max-width:680px">
+    <button class="setup-close" onclick="closeCircuitForm()" title="Schließen">×</button>
+    <div class="setup-title" id="circuit-form-title">Kreislauf anlegen</div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group" style="max-width:140px">
+        <label class="form-label">ID *</label>
+        <input class="form-input" id="c-id" placeholder="K1, K5a…" maxlength="10" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Name *</label>
+        <input class="form-input" id="c-name" placeholder="z.B. K1 - Rasen vorne" />
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Beschreibung</label>
+        <input class="form-input" id="c-description" placeholder="Sprenger-Typ, abgedeckte Bereiche…" />
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Tage</label>
+        <div id="c-days-checks" style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 0"></div>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group" style="max-width:140px">
+        <label class="form-label">Startzeit</label>
+        <input class="form-input" id="c-startTime" type="time" value="05:00" />
+      </div>
+      <div class="form-group" style="max-width:160px">
+        <label class="form-label">Dauer (Min)</label>
+        <input class="form-input" id="c-durationMin" type="number" min="0" max="240" placeholder="25" />
+      </div>
+      <div class="form-group" style="max-width:200px">
+        <label class="form-label">Wassergabe (mm/h)</label>
+        <select class="form-select" id="c-flowPreset" onchange="applyCircuitFlowPreset()">
+          <option value="">— eigener Wert —</option>
+          <option value="12">Versenkregner ~12 mm/h</option>
+          <option value="8">Sprühregner ~8 mm/h</option>
+          <option value="3">Tropfschlauch ~3 mm/h</option>
+          <option value="0">unbekannt / manuell</option>
+        </select>
+        <input class="form-input" id="c-flowMmPerHour" type="number" min="0" max="50" step="0.5" placeholder="0" style="margin-top:6px" />
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group" style="max-width:160px">
+        <label class="form-label">Aktiv</label>
+        <select class="form-select" id="c-active">
+          <option value="true">aktiv</option>
+          <option value="false">inaktiv (Saison-Pause)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <label class="form-label">Notizen</label>
+        <textarea class="form-input" id="c-notes" rows="3" placeholder="Besonderheiten, Saison-Hinweise…" style="height:auto;padding:8px 12px;resize:vertical;font-family:inherit;line-height:1.4"></textarea>
+      </div>
+    </div>
+    <div class="setup-actions" style="margin-top:1rem">
+      <button class="btn primary" id="c-save-btn" onclick="saveCircuit()">Speichern</button>
+      <button class="btn ghost" onclick="closeCircuitForm()">Abbrechen</button>
+      <button class="btn danger" id="c-delete-btn" onclick="deleteCircuitConfirm()" style="display:none">Löschen</button>
+      <span class="form-err" id="c-err"></span>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
@@ -1152,6 +1224,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   <div class="nav-tabs" id="nav-tabs-outdoor" style="display:none">
     <button class="nav-tab on" onclick="showPanel('out-sammlung', this)">Sammlung</button>
     <button class="nav-tab"    onclick="showPanel('out-bereiche', this)">Bereiche</button>
+    <button class="nav-tab"    onclick="showPanel('out-bewaesserung', this)">Bewässerung</button>
     <button class="nav-tab"    onclick="showPanel('out-zeitleiste', this)">Zeitleiste</button>
   </div>
   <span class="nav-count" id="nav-count"></span>
@@ -1459,6 +1532,19 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <button class="btn" style="margin-top:1rem" onclick="seedZonesUi()">Vorgeschlagene Bereiche aus deiner Liste laden</button>
     </div>
   </div>
+  <div id="panel-out-bewaesserung" class="panel">
+    <div class="toolbar">
+      <input class="search" id="circuit-srch" placeholder="Kreislauf suchen…" oninput="renderCircuitGrid()" />
+      <button class="btn primary" onclick="openCircuitForm()">+ Kreislauf</button>
+    </div>
+    <div class="zone-grid" id="circuit-grid"></div>
+    <div class="zone-empty" id="circuit-empty" style="display:none">
+      <div style="font-size:42px;margin-bottom:.5rem">💧</div>
+      <strong>Noch keine Bewässerungs-Kreisläufe angelegt.</strong><br>
+      <span class="zone-empty-hint">Hinterlege deine Gardena-Kreisläufe mit Tagen, Startzeit und Dauer. Damit kann die App Bewässerungs-Status pro Bereich anzeigen und bei Regen-Forecast vorwarnen.</span><br>
+      <button class="btn" style="margin-top:1rem" onclick="seedCircuitsUi()">K1–K6 anlegen</button>
+    </div>
+  </div>
   <div id="panel-out-zeitleiste" class="panel">
     <div class="tl-toolbar">
       <div class="tl-month-nav">
@@ -1666,7 +1752,7 @@ function applyMode() {
   document.getElementById('nav-tabs-outdoor').style.display = MODE === 'outdoor' ? '' : 'none';
   // Alle Panels schliessen, dann das erste des aktiven Modus oeffnen
   var indoorPanels  = ['sammlung','berater','substrate','duenger','kalender'];
-  var outdoorPanels = ['out-sammlung','out-bereiche','out-zeitleiste'];
+  var outdoorPanels = ['out-sammlung','out-bereiche','out-bewaesserung','out-zeitleiste'];
   var allPanels = indoorPanels.concat(outdoorPanels);
   allPanels.forEach(function(name) {
     var el = document.getElementById('panel-' + name);
@@ -1694,6 +1780,8 @@ function setMode(m) {
   // Falls noch ein Outdoor-Modal offen ist: schliessen
   var zoneOv = document.getElementById('zone-overlay');
   if (zoneOv && !zoneOv.classList.contains('hidden')) closeZoneForm();
+  var circOv = document.getElementById('circuit-overlay');
+  if (circOv && !circOv.classList.contains('hidden')) closeCircuitForm();
   MODE = m;
   try { localStorage.setItem('pfk_mode', MODE); } catch(e){}
   applyMode();
@@ -4252,6 +4340,7 @@ function showPanel(name,btn){
   if(name==='duenger') renderFertList();
   if(name==='kalender') renderCalendarPanel();
   if(name==='out-bereiche') openZonesPanel();
+  if(name==='out-bewaesserung') openCircuitsPanel();
   if(name==='out-sammlung') openOutdoorPanel();
   if(name==='out-zeitleiste') openOutdoorTimelinePanel();
 }
@@ -5090,6 +5179,313 @@ function generateZoneCarePlan() {
   }).catch(function(err){
     console.warn('Zone-CarePlan Network-Error:', err);
     box.innerHTML = '<div style="color:var(--danger);padding:1rem">Verbindungsfehler: ' + esc(err.message||'unbekannt') + '</div>';
+  });
+}
+
+// === Bewaesserungs-Kreislaeufe (Phase O8) ===
+// CRUD-Loop fuer den Bewaesserung-Tab. Wetter-Integration folgt in spaeterem Schritt.
+
+var CIRCUITS = [];
+var circuitsLoaded = false;
+var circuitEditId = null;
+
+var DAYS_DE = [
+  {key: 'Mo', label: 'Mo'},
+  {key: 'Di', label: 'Di'},
+  {key: 'Mi', label: 'Mi'},
+  {key: 'Do', label: 'Do'},
+  {key: 'Fr', label: 'Fr'},
+  {key: 'Sa', label: 'Sa'},
+  {key: 'So', label: 'So'}
+];
+
+function openCircuitsPanel() {
+  if (circuitsLoaded) {
+    renderCircuitGrid();
+    return;
+  }
+  var grid = document.getElementById('circuit-grid');
+  grid.innerHTML = '<div class="care-placeholder">Lade Kreisläufe…</div>';
+  document.getElementById('circuit-empty').style.display = 'none';
+  apiFetch({action: 'getCircuits'}).then(function(res) {
+    if (!res.ok) {
+      toast('Fehler beim Laden der Kreisläufe: ' + (res.error || '?'));
+      CIRCUITS = [];
+    } else {
+      CIRCUITS = res.data || [];
+    }
+    circuitsLoaded = true;
+    renderCircuitGrid();
+  }).catch(function() {
+    toast('Verbindungsfehler');
+    CIRCUITS = [];
+    circuitsLoaded = true;
+    renderCircuitGrid();
+  });
+}
+
+function renderCircuitGrid() {
+  var grid = document.getElementById('circuit-grid');
+  var empty = document.getElementById('circuit-empty');
+  if (!CIRCUITS.length) {
+    grid.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  var srch = (document.getElementById('circuit-srch').value || '').toLowerCase().trim();
+  var visible = CIRCUITS.filter(function(c) {
+    if (!srch) return true;
+    var hay = (c.id + ' ' + c.name + ' ' + (c.description||'') + ' ' + (c.notes||'')).toLowerCase();
+    return hay.indexOf(srch) >= 0;
+  });
+
+  if (!visible.length) {
+    grid.innerHTML = '<div class="empty" style="padding:2rem 1rem">Keine Treffer.</div>';
+    return;
+  }
+
+  // Sortierung: ID alphanumerisch
+  visible.sort(function(a, b) { return (a.id || '').localeCompare(b.id || '', 'de'); });
+
+  grid.innerHTML = visible.map(function(c) { return renderCircuitCard(c); }).join('');
+}
+
+function renderCircuitCard(c) {
+  var idPill = '<span class="zone-pill">' + esc(c.id) + '</span>';
+  var activePill = (c.active === 'false' || c.active === false)
+    ? '<span class="zone-pill" style="background:var(--bg);color:var(--muted)">Pause</span>'
+    : '';
+
+  // Tage-Pills
+  var daysSet = parseDays(c.days);
+  var dayPillsHtml = DAYS_DE.map(function(d) {
+    var on = daysSet[d.key];
+    var style = on
+      ? 'background:var(--gl);color:var(--g2);border:1px solid var(--g2)'
+      : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-l)';
+    return '<span class="zone-pill" style="' + style + ';font-weight:500;min-width:24px;text-align:center;padding:1px 6px">' + d.label + '</span>';
+  }).join(' ');
+
+  // Plan-Zeile
+  var planLine = '';
+  if (c.startTime && c.durationMin) {
+    var dur = parseInt(c.durationMin, 10) || 0;
+    var flow = parseFloat(c.flowMmPerHour) || 0;
+    var mmExpected = (flow > 0) ? ' · ~' + (Math.round(flow * dur / 60 * 10) / 10) + ' mm' : '';
+    planLine = '<div class="zone-card-notes" style="font-size:13px">⏰ ' + esc(c.startTime) + ' · ' + dur + ' Min' + mmExpected + '</div>';
+  } else {
+    planLine = '<div class="zone-card-notes" style="font-size:12px;color:var(--muted);font-style:italic">Plan noch nicht hinterlegt</div>';
+  }
+
+  // Beschreibung
+  var descHtml = c.description
+    ? '<div class="zone-card-notes" style="margin-top:4px">' + esc(c.description) + '</div>'
+    : '';
+
+  // Zugeordnete Bereiche im Footer
+  var assignedZones = ZONES.filter(function(z) { return z.irrigationCircuit === c.id; });
+  var zoneLabel = assignedZones.length === 1 ? '1 Bereich' : (assignedZones.length + ' Bereiche');
+  var zoneNames = assignedZones.length
+    ? ': ' + assignedZones.map(function(z){return z.name;}).join(', ')
+    : '';
+  var meta = zoneLabel + zoneNames;
+
+  return '<div class="zone-card" onclick="openCircuitForm(\'' + esc(c.id) + '\')">'+
+    '<div class="zone-card-head">'+
+      '<div class="zone-card-name">' + esc(c.name) + '</div>'+
+    '</div>'+
+    '<div class="zone-card-pills">' + idPill + activePill + ' ' + dayPillsHtml + '</div>'+
+    planLine +
+    descHtml +
+    '<div class="zone-card-meta">' + esc(meta) + '</div>'+
+  '</div>';
+}
+
+// Days-String "Mo,Mi,Fr" -> {Mo:true, Mi:true, Fr:true}
+function parseDays(daysStr) {
+  var out = {};
+  if (!daysStr) return out;
+  String(daysStr).split(',').forEach(function(d) {
+    var k = d.trim();
+    if (k) out[k] = true;
+  });
+  return out;
+}
+
+function serializeDays(daysSet) {
+  var out = [];
+  DAYS_DE.forEach(function(d) {
+    if (daysSet[d.key]) out.push(d.key);
+  });
+  return out.join(',');
+}
+
+function openCircuitForm(id) {
+  circuitEditId = id || null;
+  var isEdit = !!id;
+  var c = isEdit ? CIRCUITS.find(function(x){return x.id === id;}) : null;
+
+  document.getElementById('circuit-form-title').textContent = isEdit ? 'Kreislauf bearbeiten' : 'Kreislauf anlegen';
+  document.getElementById('c-id').value          = c ? (c.id || '') : '';
+  document.getElementById('c-id').disabled       = isEdit; // ID nicht aenderbar
+  document.getElementById('c-name').value        = c ? (c.name || '') : '';
+  document.getElementById('c-description').value = c ? (c.description || '') : '';
+  document.getElementById('c-startTime').value   = c ? (c.startTime || '05:00') : '05:00';
+  document.getElementById('c-durationMin').value = c ? (c.durationMin || '') : '';
+  document.getElementById('c-flowMmPerHour').value = c ? (c.flowMmPerHour || '') : '';
+  document.getElementById('c-flowPreset').value  = '';
+  document.getElementById('c-active').value      = (c && (c.active === 'false' || c.active === false)) ? 'false' : 'true';
+  document.getElementById('c-notes').value       = c ? (c.notes || '') : '';
+  document.getElementById('c-err').textContent   = '';
+
+  // Tage-Checkboxen aufbauen
+  var daysSet = parseDays(c ? c.days : '');
+  document.getElementById('c-days-checks').innerHTML = DAYS_DE.map(function(d) {
+    var checked = daysSet[d.key] ? ' checked' : '';
+    return '<label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;'+
+      'padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:white">'+
+      '<input type="checkbox" class="c-day-check" value="' + d.key + '"' + checked + '> ' + d.label +
+    '</label>';
+  }).join('');
+
+  document.getElementById('c-delete-btn').style.display = isEdit ? '' : 'none';
+  document.getElementById('circuit-overlay').classList.remove('hidden');
+}
+
+function closeCircuitForm() {
+  document.getElementById('circuit-overlay').classList.add('hidden');
+  circuitEditId = null;
+}
+
+function applyCircuitFlowPreset() {
+  var v = document.getElementById('c-flowPreset').value;
+  if (v === '') return;
+  document.getElementById('c-flowMmPerHour').value = v;
+  document.getElementById('c-flowPreset').value = ''; // wieder zuruecksetzen
+}
+
+function saveCircuit() {
+  var idVal = document.getElementById('c-id').value.trim();
+  var nameVal = document.getElementById('c-name').value.trim();
+  var errEl = document.getElementById('c-err');
+  errEl.textContent = '';
+  if (!idVal) { errEl.textContent = 'ID ist Pflicht.'; return; }
+  if (!nameVal) { errEl.textContent = 'Name ist Pflicht.'; return; }
+  // ID-Format pruefen: keine Whitespaces, kurze Strings
+  if (/\s/.test(idVal)) { errEl.textContent = 'ID darf keine Leerzeichen enthalten.'; return; }
+  // Bei Anlage: Doppelpruefung
+  if (!circuitEditId) {
+    if (CIRCUITS.some(function(c){return c.id === idVal;})) {
+      errEl.textContent = 'ID ' + idVal + ' existiert bereits.';
+      return;
+    }
+  }
+
+  // Tage einsammeln
+  var daysSet = {};
+  document.querySelectorAll('.c-day-check').forEach(function(cb) {
+    if (cb.checked) daysSet[cb.value] = true;
+  });
+  var daysStr = serializeDays(daysSet);
+
+  var flow = parseFloat(document.getElementById('c-flowMmPerHour').value);
+  if (isNaN(flow) || flow < 0) flow = 0;
+
+  var dur = parseInt(document.getElementById('c-durationMin').value, 10);
+  if (isNaN(dur) || dur < 0) dur = 0;
+
+  var payload = {
+    action: circuitEditId ? 'updateCircuit' : 'addCircuit',
+    id: idVal,
+    name: nameVal,
+    description: document.getElementById('c-description').value,
+    days: daysStr,
+    startTime: document.getElementById('c-startTime').value,
+    durationMin: String(dur),
+    flowMmPerHour: String(flow),
+    active: document.getElementById('c-active').value,
+    notes: document.getElementById('c-notes').value
+  };
+
+  var btn = document.getElementById('c-save-btn');
+  btn.disabled = true;
+  apiFetch(payload).then(function(res) {
+    btn.disabled = false;
+    if (!res.ok) {
+      errEl.textContent = 'Fehler: ' + (res.error || '?');
+      return;
+    }
+    // Lokal updaten
+    if (circuitEditId) {
+      var idx = CIRCUITS.findIndex(function(c){return c.id === circuitEditId;});
+      if (idx >= 0) {
+        Object.keys(payload).forEach(function(k) {
+          if (k !== 'action') CIRCUITS[idx][k] = payload[k];
+        });
+      }
+    } else {
+      var newC = {};
+      Object.keys(payload).forEach(function(k) { if (k !== 'action') newC[k] = payload[k]; });
+      newC.updatedAt = new Date().toISOString();
+      CIRCUITS.push(newC);
+    }
+    toast(circuitEditId ? 'Kreislauf gespeichert' : 'Kreislauf angelegt');
+    closeCircuitForm();
+    renderCircuitGrid();
+  }).catch(function() {
+    btn.disabled = false;
+    errEl.textContent = 'Verbindungsfehler';
+  });
+}
+
+function deleteCircuitConfirm() {
+  if (!circuitEditId) return;
+  var c = CIRCUITS.find(function(x){return x.id === circuitEditId;});
+  if (!c) return;
+  // Pre-Check: zugeordnete Bereiche
+  var refs = ZONES.filter(function(z){return z.irrigationCircuit === c.id;}).length;
+  if (refs > 0) {
+    document.getElementById('c-err').textContent =
+      'Kreislauf wird von ' + refs + ' Bereich(en) genutzt — erst dort umhängen.';
+    return;
+  }
+  if (!confirm('Kreislauf "' + c.name + '" wirklich löschen?')) return;
+  var btn = document.getElementById('c-delete-btn');
+  btn.disabled = true;
+  apiFetch({action: 'deleteCircuit', id: circuitEditId}).then(function(res) {
+    btn.disabled = false;
+    if (!res.ok) {
+      document.getElementById('c-err').textContent = 'Fehler: ' + (res.error || '?');
+      return;
+    }
+    CIRCUITS = CIRCUITS.filter(function(x){return x.id !== circuitEditId;});
+    toast('Kreislauf gelöscht');
+    closeCircuitForm();
+    renderCircuitGrid();
+  }).catch(function() {
+    btn.disabled = false;
+    document.getElementById('c-err').textContent = 'Verbindungsfehler';
+  });
+}
+
+function seedCircuitsUi() {
+  if (!confirm('K1–K6 als leere Kreisläufe anlegen? Du füllst die Pläne danach selbst aus.')) return;
+  apiFetch({action: 'seedCircuits'}).then(function(res) {
+    if (!res.ok) {
+      toast('Fehler: ' + (res.error || '?'));
+      return;
+    }
+    if (res.data && res.data.skipped) {
+      toast(res.data.skipped);
+      return;
+    }
+    toast('Kreisläufe angelegt: ' + (res.data && res.data.seeded ? res.data.seeded : '?'));
+    circuitsLoaded = false;
+    openCircuitsPanel();
+  }).catch(function() {
+    toast('Verbindungsfehler');
   });
 }
 
@@ -6510,11 +6906,15 @@ function buildZoneContextForPrompt(z) {
       var repot = document.getElementById('repot-overlay');
       var detail = document.getElementById('detail-overlay');
       var zone = document.getElementById('zone-overlay');
+      var zoneDetail = document.getElementById('zone-detail-overlay');
+      var circuit = document.getElementById('circuit-overlay');
       var opDetail = document.getElementById('op-detail-overlay');
       if (fertassign && !fertassign.classList.contains('hidden')) { closeFertAssignModal(); return; }
       if (repot && !repot.classList.contains('hidden')) { closeRepotModal(); return; }
       if (detail && !detail.classList.contains('hidden')) { closeDetailModal(); return; }
       if (opDetail && !opDetail.classList.contains('hidden')) { closeOutdoorDetailModal(); return; }
+      if (zoneDetail && !zoneDetail.classList.contains('hidden')) { closeZoneDetailModal(); return; }
+      if (circuit && !circuit.classList.contains('hidden')) { closeCircuitForm(); return; }
       if (zone && !zone.classList.contains('hidden')) { closeZoneForm(); return; }
       closeSettings();
     }
