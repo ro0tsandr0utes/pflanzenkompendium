@@ -916,6 +916,10 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <button class="btn" onclick="bulkRefreshCare()" id="bulk-btn">Alle Pflegepläne aktualisieren</button>
       <span id="bulk-status" class="setup-ok"></span>
     </div>
+    <div class="setup-actions" style="margin-top:.5rem">
+      <button class="btn" onclick="bulkRefreshOutdoorCare()" id="bulk-out-btn">Alle Outdoor-Pflegepläne aktualisieren</button>
+      <span id="bulk-out-status" class="setup-ok"></span>
+    </div>
   </div>
 </div>
 
@@ -3495,6 +3499,120 @@ function bulkRefreshCare() {
   next();
 }
 
+// === Bulk-Refresh aller Outdoor-Pflegeplaene ===
+// Analog zu bulkRefreshCare, aber mit Outdoor-Prompt (Bereich/Boden/Bewaesserung
+// statt Substrat/Topf, keine Dosis-Felder, keine Duenger-Empfehlung).
+// Befuellt nur leere Felder (seasonalEvents, Intervalle) - Bestehendes bleibt.
+function bulkRefreshOutdoorCare() {
+  if (!cfg.url || !cfg.key) {
+    document.getElementById('bulk-out-status').textContent = 'URL und API Key müssen gesetzt sein.';
+    return;
+  }
+  if (!outdoorPlants || !outdoorPlants.length) {
+    document.getElementById('bulk-out-status').textContent = 'Keine Outdoor-Pflanzen geladen. Erst Outdoor-Modus oeffnen.';
+    return;
+  }
+  var btn = document.getElementById('bulk-out-btn');
+  var st  = document.getElementById('bulk-out-status');
+  if (!confirm('Pflegepläne für ' + outdoorPlants.length + ' Outdoor-Pflanzen neu generieren? Dauert ca. ' + Math.ceil(outdoorPlants.length * 0.8) + ' Sekunden.')) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Läuft…';
+  var ok = 0, fail = 0;
+  var i = 0;
+  var todayIso = toIsoDate(new Date());
+
+  function next() {
+    if (i >= outdoorPlants.length) {
+      btn.disabled = false;
+      btn.textContent = 'Alle Outdoor-Pflegepläne aktualisieren';
+      st.textContent = 'Fertig: ' + ok + ' erfolgreich, ' + fail + ' fehlgeschlagen.';
+      if (typeof renderOutdoorGrid === 'function' && MODE === 'outdoor') renderOutdoorGrid();
+      return;
+    }
+    var entry = outdoorPlants[i];
+    st.textContent = 'Pflanze ' + (i+1) + ' von ' + outdoorPlants.length + ': ' + entry.name + '…';
+
+    var zone = ZONES.find(function(z){return z.id === entry.zoneId;});
+    var zoneCtx = zone ? buildZoneContextForPrompt(zone) : 'kein Bereich zugeordnet';
+
+    var prompt = 'Du bist Garten-/Outdoor-Pflanzenexperte. Erstelle einen Pflegeplan fuer DIESE Garten-Pflanze in diesem Standort.\n\n'+
+      'Pflanze: ' + entry.name + '\n' +
+      (entry.category ? 'Kategorie: ' + (OUTDOOR_CAT_LABELS[entry.category]||entry.category) + '\n' : '') +
+      (entry.hardy ? 'Winterhaerte: ' + entry.hardy + '\n' : '') +
+      (entry.invasive === 'ja' ? 'Hinweis: invasiv\n' : '') +
+      (entry.companions ? 'Pflanznachbarn: ' + entry.companions + '\n' : '') +
+      'Bereich/Standort: ' + zoneCtx + '\n' +
+      (entry.notes ? 'User-Notizen (sehr wichtig, hat Vorrang vor Allgemeinwissen):\n' + entry.notes + '\n' : '') +
+      '\nHeute ist der ' + todayIso + '.\n' +
+      '\nAntworte NUR mit JSON, Sektionen analog Indoor-Pflegeplan:\n' +
+      '{\n' +
+      '  "standort": "Standortbedingungen, Sonne, Boden",\n' +
+      '  "giessen": "Bewaesserung, beachte automatische Bewaesserungsanlage falls relevant",\n' +
+      '  "duengen": "Duengung, saisonale Empfehlungen, Mengen",\n' +
+      '  "rueckschnitt": "Wann und wie schneiden",\n' +
+      '  "fehler": "Haeufige Fehler bei dieser Pflanze",\n' +
+      '  "seasonalEvents": [{"date":"YYYY-MM-DD","text":"kurze Aufgabe","recurYears":1}]\n' +
+      '}\n\n' +
+      'seasonalEvents: 0-5 saisonale Pflege-Erinnerungen pro Jahr. Datumsangaben muessen ' + todayIso + ' oder spaeter sein. ' +
+      'recurYears: 1 fuer jaehrliche Wiederkehr (Default), 2-99 fuer Mehrjahresintervalle. ' +
+      'Text kurz und konkret. Auf User-Notizen Bezug nehmen wenn dort schon Pflegehinweise stehen.';
+
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(data){
+      if (!data.content || !Array.isArray(data.content)) {
+        fail++; i++; setTimeout(next, 600); return;
+      }
+      var raw = data.content.find(function(b){return b.type==='text';});
+      raw = raw ? raw.text : '{}';
+      var obj;
+      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+      catch(e) { fail++; i++; setTimeout(next, 600); return; }
+
+      var carePlanStr = JSON.stringify({
+        standort: obj.standort || '',
+        giessen: obj.giessen || '',
+        duengen: obj.duengen || '',
+        rueckschnitt: obj.rueckschnitt || '',
+        fehler: obj.fehler || ''
+      });
+      var nowIso = new Date().toISOString();
+      entry.carePlan = carePlanStr;
+      entry.carePlanAt = nowIso;
+      var payload = {action:'updateOutdoorPlant', id:entry.id, carePlan:carePlanStr, carePlanAt:nowIso};
+
+      // seasonalEvents nur uebernehmen wenn aktuell leer (User-Wahl > KI)
+      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
+        var validEvents = obj.seasonalEvents.filter(function(e){
+          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+        }).map(function(e){
+          var rec = parseInt(e.recurYears, 10);
+          return {
+            date: e.date,
+            text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -'),
+            recurYears: (rec && rec > 1) ? rec : 1
+          };
+        });
+        if (validEvents.length > 0) {
+          var serialized = serializeEvents(validEvents);
+          entry.seasonalEvents = serialized;
+          payload.seasonalEvents = serialized;
+        }
+      }
+
+      apiFetch(payload).then(function(){ ok++; }).catch(function(){ fail++; }).then(function(){
+        i++; setTimeout(next, 600);
+      });
+    }).catch(function(){
+      fail++; i++; setTimeout(next, 600);
+    });
+  }
+  next();
+}
+
 // === Details-Modal ===
 var detailPlantId = null;
 
@@ -5336,7 +5454,7 @@ function renderOutdoorEventsBlock(events, totalCount) {
   if (events.length < totalCount) {
     summaryLabel += ' insgesamt — Top ' + events.length + ' anzeigen';
   }
-  return '<details class="care-events-fold" open><summary>🍂 '+summaryLabel+'</summary>'+
+  return '<details class="care-events-fold"><summary>🍂 '+summaryLabel+'</summary>'+
     '<div class="care-events">'+rows+'</div></details>';
 }
 
