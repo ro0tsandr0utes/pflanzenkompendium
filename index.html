@@ -681,6 +681,20 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   color: var(--text);
 }
 
+/* Bereich-Pflegeplan: Monats-Akkordeons (Phase O7) */
+.zone-month-fold.current summary {
+  background: var(--gl);
+  font-weight: 600;
+}
+.zone-month-tasks {
+  margin: 0; padding-left: 1.25rem;
+  font-size: 13.5px; line-height: 1.7;
+}
+.zone-month-tasks li { padding: 2px 0; }
+.zone-month-empty {
+  font-size: 12px; color: var(--muted); font-style: italic;
+}
+
 .detail-actions {
   display: flex; gap: 8px; flex-wrap: wrap;
   padding-top: 1rem;
@@ -991,6 +1005,21 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="detail-body">
       <div id="op-detail-panel-info"></div>
       <div id="op-detail-panel-care" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Bereich-Detail-Modal (Phase O7) -->
+<div class="overlay hidden" id="zone-detail-overlay" onclick="if(event.target===this)closeZoneDetailModal()">
+  <div class="detail-card">
+    <button class="setup-close" onclick="closeZoneDetailModal()" title="Schließen">×</button>
+    <div class="detail-tabs">
+      <button class="detail-tab on" id="zone-detail-tab-info" onclick="showZoneDetailTab('info')">Details</button>
+      <button class="detail-tab" id="zone-detail-tab-care" onclick="showZoneDetailTab('care')">Pflegeplan</button>
+    </div>
+    <div class="detail-body">
+      <div id="zone-detail-panel-info"></div>
+      <div id="zone-detail-panel-care" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -4611,7 +4640,7 @@ function renderZoneCard(z) {
   var meta = n === 1 ? '1 Pflanze' : (n + ' Pflanzen');
   if (z.areaM2) meta += ' · ' + z.areaM2 + ' m²';
 
-  return '<div class="zone-card" onclick="openZoneForm(\'' + esc(z.id) + '\')">'+
+  return '<div class="zone-card" onclick="openZoneDetailModal(\'' + esc(z.id) + '\')">'+
     '<div class="zone-card-head">'+
       '<div class="zone-card-name">' + esc(z.name) + '</div>'+
     '</div>'+
@@ -4794,6 +4823,273 @@ function deleteZoneConfirm() {
       closeZoneForm();
       renderZoneGrid();
     });
+  });
+}
+
+// === Bereich-Detail-Modal (Phase O7) ===
+// Wird von der Zone-Card geoeffnet. Zwei Tabs: "Details" (read-only Uebersicht
+// mit Bearbeiten-Knopf) und "Pflegeplan" (12-Monats-Plan, KI-generiert, im
+// Sheet gecached unter carePlan/carePlanAt).
+
+var zoneDetailId = null;
+
+var ZONE_MONTHS = [
+  {key: '01', label: 'Januar'},
+  {key: '02', label: 'Februar'},
+  {key: '03', label: 'März'},
+  {key: '04', label: 'April'},
+  {key: '05', label: 'Mai'},
+  {key: '06', label: 'Juni'},
+  {key: '07', label: 'Juli'},
+  {key: '08', label: 'August'},
+  {key: '09', label: 'September'},
+  {key: '10', label: 'Oktober'},
+  {key: '11', label: 'November'},
+  {key: '12', label: 'Dezember'}
+];
+
+function openZoneDetailModal(id) {
+  var z = ZONES.find(function(x){return x.id === id;});
+  if (!z) return;
+  zoneDetailId = id;
+  // Reset auf Info-Tab
+  document.getElementById('zone-detail-tab-info').classList.add('on');
+  document.getElementById('zone-detail-tab-care').classList.remove('on');
+  document.getElementById('zone-detail-panel-info').style.display = '';
+  document.getElementById('zone-detail-panel-care').style.display = 'none';
+  renderZoneDetailInfo(z);
+  renderZoneDetailCare(z);
+  document.getElementById('zone-detail-overlay').classList.remove('hidden');
+}
+
+function closeZoneDetailModal() {
+  document.getElementById('zone-detail-overlay').classList.add('hidden');
+  zoneDetailId = null;
+}
+
+function showZoneDetailTab(tab) {
+  ['info','care'].forEach(function(t) {
+    document.getElementById('zone-detail-tab-' + t).classList.toggle('on', t === tab);
+    document.getElementById('zone-detail-panel-' + t).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function renderZoneDetailInfo(z) {
+  var box = document.getElementById('zone-detail-panel-info');
+  var rows = [];
+  if (z.category && ZONE_CAT_LABELS[z.category]) rows.push(['Kategorie', ZONE_CAT_LABELS[z.category]]);
+  if (z.orientation) rows.push(['Ausrichtung', z.orientation]);
+  if (z.sun && ZONE_SUN_LABELS[z.sun]) rows.push(['Sonne', ZONE_SUN_LABELS[z.sun]]);
+  if (z.soil) rows.push(['Boden', z.soil]);
+  var irrLabel = '';
+  if (z.irrigationGroup && ZONE_IRR_GROUP_LABELS[z.irrigationGroup]) {
+    irrLabel = ZONE_IRR_GROUP_LABELS[z.irrigationGroup];
+    if (z.irrigationCircuit) irrLabel += ' (' + z.irrigationCircuit + ')';
+  } else if (z.irrigationCircuit) {
+    irrLabel = z.irrigationCircuit;
+  }
+  if (irrLabel) rows.push(['Bewässerung', irrLabel]);
+  if (z.areaM2) rows.push(['Fläche', z.areaM2 + ' m²']);
+
+  var n = outdoorPlantsLoaded
+    ? outdoorPlants.filter(function(p){return p.zoneId === z.id;}).length
+    : 0;
+  rows.push(['Pflanzen', n === 1 ? '1 Pflanze' : (n + ' Pflanzen')]);
+
+  var rowsHtml = rows.map(function(r) {
+    return '<div class="detail-row"><span class="detail-label">' + esc(r[0]) + ': </span>'+
+           '<span class="detail-value">' + esc(r[1]) + '</span></div>';
+  }).join('');
+
+  var notesHtml = z.notes
+    ? '<div class="detail-section">'+
+        '<div class="detail-label">Notizen</div>'+
+        '<div class="detail-notes">' + esc(z.notes).replace(/\n/g,'<br>') + '</div>'+
+      '</div>'
+    : '';
+
+  box.innerHTML =
+    '<div class="detail-head">'+
+      '<div>'+
+        '<div class="detail-title">' + esc(z.name) + '</div>'+
+      '</div>'+
+    '</div>'+
+    (rowsHtml ? '<div class="detail-section">' + rowsHtml + '</div>' : '') +
+    notesHtml +
+    '<div class="detail-actions" style="margin-top:1rem;display:flex;gap:8px">'+
+      '<button class="btn" onclick="openZoneEditFromDetail()">Bearbeiten</button>'+
+    '</div>';
+}
+
+function openZoneEditFromDetail() {
+  var id = zoneDetailId;
+  closeZoneDetailModal();
+  openZoneForm(id);
+}
+
+function renderZoneDetailCare(z) {
+  var box = document.getElementById('zone-detail-panel-care');
+  if (!z.carePlan) {
+    box.innerHTML =
+      '<div class="empty" style="padding:2rem 1rem">'+
+        '<div style="margin-bottom:1rem">Noch kein Pflegeplan generiert.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:1rem">'+
+          'Die KI erstellt einen Jahres-Pflegeplan mit typischen Arbeiten pro Monat — '+
+          'basierend auf Kategorie, Standort, Boden und Bewässerung dieses Bereichs.'+
+        '</div>'+
+        '<button class="btn primary" onclick="generateZoneCarePlan()">Pflegeplan generieren</button>'+
+      '</div>';
+    return;
+  }
+  var obj;
+  try { obj = JSON.parse(z.carePlan); }
+  catch(e) {
+    box.innerHTML = '<div class="empty">Pflegeplan konnte nicht gelesen werden.</div>';
+    return;
+  }
+
+  var meta = '';
+  if (z.carePlanAt) {
+    var d = new Date(z.carePlanAt);
+    meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">'+
+      'Gespeichert am ' + esc(d.toLocaleDateString('de-DE')) +
+      ' · <button class="btn sm" onclick="generateZoneCarePlan()" style="margin-left:6px">↻ Neu generieren</button>'+
+    '</div>';
+  }
+
+  var currentMonth = (new Date().getMonth() + 1);
+  var currentMonthKey = (currentMonth < 10 ? '0' : '') + currentMonth;
+
+  var folds = ZONE_MONTHS.map(function(m) {
+    var tasks = (obj && Array.isArray(obj[m.key])) ? obj[m.key] : [];
+    var isCurrent = (m.key === currentMonthKey);
+    var openAttr = isCurrent ? ' open' : '';
+    var foldCls = 'detail-fold zone-month-fold' + (isCurrent ? ' current' : '');
+    var content;
+    if (tasks.length === 0) {
+      content = '<div class="zone-month-empty">Keine besonderen Arbeiten.</div>';
+    } else {
+      content = '<ul class="zone-month-tasks">' +
+        tasks.map(function(t){ return '<li>' + esc(String(t)) + '</li>'; }).join('') +
+      '</ul>';
+    }
+    return '<details class="' + foldCls + '"' + openAttr + '>'+
+      '<summary>'+
+        '<span class="detail-fold-icon">📅</span>'+
+        '<span class="detail-fold-label">' + esc(m.label) + '</span>'+
+        '<span class="detail-fold-meta">' + tasks.length + '</span>'+
+      '</summary>'+
+      '<div class="detail-fold-content">' + content + '</div>'+
+    '</details>';
+  }).join('');
+
+  box.innerHTML = meta + folds;
+}
+
+function generateZoneCarePlan() {
+  if (!zoneDetailId) return;
+  var z = ZONES.find(function(x){return x.id === zoneDetailId;});
+  if (!z) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+
+  var box = document.getElementById('zone-detail-panel-care');
+  box.innerHTML = '<div style="text-align:center;padding:2rem 1rem">'+
+    '<div style="font-size:32px;margin-bottom:.5rem">✦</div>'+
+    '<strong>Jahres-Pflegeplan wird generiert…</strong>'+
+  '</div>';
+
+  var zoneCtx = buildZoneContextForPrompt(z);
+
+  var prompt = 'Du bist Garten-/Outdoor-Pflanzenexperte fuer Mitteleuropa (Brandenburg, Klimazone 7a). '+
+    'Erstelle einen Jahres-Pflegeplan fuer DIESEN Garten-Bereich, monatsweise.\n\n'+
+    'Bereich: ' + zoneCtx + '\n\n'+
+    'Antworte NUR mit JSON. Schluessel sind Monatsnummern als zweistellige Strings ("01" bis "12"), '+
+    'Werte sind Arrays kurzer Pflegeaufgaben (typische Arbeiten in DIESEM Monat fuer DIESEN Bereich-Typ).\n\n'+
+    'Format:\n'+
+    '{\n'+
+    '  "01": ["Aufgabe 1", "Aufgabe 2"],\n'+
+    '  "02": [...],\n'+
+    '  ...\n'+
+    '  "12": [...]\n'+
+    '}\n\n'+
+    'Wichtige Vorgaben:\n'+
+    '- Bereichs-spezifisch: Aufgaben muessen zur Bereich-Kategorie passen (Rasen -> Maehen/Vertikutieren/Duengen, '+
+    'Obstbaum -> Schnitt/Mulchen/Erntepflege, Beet -> Bodenvorbereitung/Pflanzung/Pflege, Spalier -> Bindearbeiten, '+
+    'Gewaechshaus -> Lueften/Schattieren/Reinigen, Kuebel -> Umtopfen/Frostschutz, etc.).\n'+
+    '- Standort beruecksichtigen: Ausrichtung, Sonne, Boden, Bewaesserungstyp.\n'+
+    '- 0-5 Aufgaben pro Monat. Leere Monate (z.B. tiefster Winter) sind ok mit [].\n'+
+    '- Aufgaben kurz und konkret (3-10 Worte), imperativ. Beispiele: "Rasen vertikutieren", "Apfelbaum-Sommerschnitt", '+
+    '"Mulchschicht erneuern", "Vlies abnehmen".\n'+
+    '- Kein Schluessel-Doppelpunkt im Aufgabentext, kein Pipe-Zeichen.';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': cfg.key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: 'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks, keine Erklaerungen drumherum.',
+      messages: [{role:'user', content: prompt}]
+    })
+  }).then(function(r){return r.json();}).then(function(data){
+    if (!data.content || !Array.isArray(data.content)) {
+      console.warn('Zone-CarePlan API-Fehler:', data);
+      var apiMsg = (data.error && data.error.message) ? data.error.message : 'unbekannt';
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">API-Fehler: ' + esc(apiMsg) + '</div>';
+      return;
+    }
+    var raw = data.content.find(function(b){return b.type === 'text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch(e) {
+      console.warn('Zone-CarePlan JSON-Parse-Fehler:', e.message, '\nRaw:', raw);
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">Antwort-Format kaputt - siehe Browser-Konsole</div>';
+      return;
+    }
+
+    // Validieren: nur Monats-Keys "01".."12" mit Array-Wert behalten, jede Aufgabe als String.
+    var clean = {};
+    ZONE_MONTHS.forEach(function(m) {
+      var arr = obj[m.key];
+      if (Array.isArray(arr)) {
+        clean[m.key] = arr
+          .filter(function(t){ return t != null && String(t).trim().length > 0; })
+          .map(function(t){ return String(t).trim(); });
+      } else {
+        clean[m.key] = [];
+      }
+    });
+
+    var carePlanStr = JSON.stringify(clean);
+    var nowIso = new Date().toISOString();
+
+    apiFetch({
+      action: 'updateZone',
+      id: z.id,
+      carePlan: carePlanStr,
+      carePlanAt: nowIso
+    }).then(function(res){
+      if (!res.ok) {
+        box.innerHTML = '<div style="color:var(--danger);padding:1rem">Speichern fehlgeschlagen: ' + esc(res.error||'?') + '</div>';
+        return;
+      }
+      // Lokal updaten
+      z.carePlan = carePlanStr;
+      z.carePlanAt = nowIso;
+      renderZoneDetailCare(z);
+      toast('Jahres-Pflegeplan gespeichert');
+    }).catch(function(){
+      box.innerHTML = '<div style="color:var(--danger);padding:1rem">Verbindungsfehler beim Speichern</div>';
+    });
+  }).catch(function(err){
+    console.warn('Zone-CarePlan Network-Error:', err);
+    box.innerHTML = '<div style="color:var(--danger);padding:1rem">Verbindungsfehler: ' + esc(err.message||'unbekannt') + '</div>';
   });
 }
 
@@ -5922,7 +6218,7 @@ function renderOutdoorDetailInfo(p) {
   if (p.plantedAt) rows.push(['Gepflanzt', fmtDate(p.plantedAt)]);
 
   var rowsHtml = rows.map(function(r) {
-    return '<div class="detail-row"><span class="detail-label">' + esc(r[0]) + '</span>'+
+    return '<div class="detail-row"><span class="detail-label">' + esc(r[0]) + ': </span>'+
            '<span class="detail-value">' + esc(r[1]) + '</span></div>';
   }).join('');
 
@@ -5943,14 +6239,14 @@ function renderOutdoorDetailInfo(p) {
     var careRows = [];
     if (wW && wW > 0) {
       var ws = dueStatus(p, 'water');
-      careRows.push('<div class="detail-row"><span class="detail-label">Giessen</span>'+
+      careRows.push('<div class="detail-row"><span class="detail-label">Gießen: </span>'+
         '<span class="detail-value">alle ' + wW + ' Wochen' +
         (ws.tracked ? ' · ' + (ws.due ? '<strong>jetzt fällig</strong>' : 'in ' + ws.daysUntil + ' Tagen') : '') +
         '</span></div>');
     }
     if (fW && fW > 0) {
       var fs = dueStatus(p, 'fertilize');
-      careRows.push('<div class="detail-row"><span class="detail-label">Duengen</span>'+
+      careRows.push('<div class="detail-row"><span class="detail-label">Düngen: </span>'+
         '<span class="detail-value">alle ' + fW + ' Wochen' +
         (fs.tracked ? ' · ' + (fs.due ? '<strong>jetzt fällig</strong>' : 'in ' + fs.daysUntil + ' Tagen') : '') +
         '</span></div>');
