@@ -530,6 +530,18 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .weather-banner-line + .weather-banner-line { margin-top: 2px; }
 .weather-banner-line.muted { color: var(--muted); font-size: 12px; }
+.weather-banner-line.frost-plants { margin-top: 6px; line-height: 1.7; }
+.frost-plant-pill {
+  display: inline-block;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1px 8px;
+  margin: 2px 4px 2px 0;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
 
 /* Pflanzplatz-Vorschlag (Phase O6) */
 .zone-suggest-loading {
@@ -3508,6 +3520,10 @@ function bulkRefreshOutdoorCare() {
     document.getElementById('bulk-out-status').textContent = 'URL und API Key müssen gesetzt sein.';
     return;
   }
+  if (MODE !== 'outdoor') {
+    document.getElementById('bulk-out-status').textContent = 'Erst in den Outdoor-Modus wechseln.';
+    return;
+  }
   if (!outdoorPlants || !outdoorPlants.length) {
     document.getElementById('bulk-out-status').textContent = 'Keine Outdoor-Pflanzen geladen. Erst Outdoor-Modus oeffnen.';
     return;
@@ -4953,6 +4969,7 @@ var WEATHER_FROST_C = 0;
 var WEATHER_HEAT_C = 30;
 var WEATHER_SOIL_COLD_C = 12; // unter 12 Grad Bodentemp = zu kalt fuer Tomaten/Gurken
 var WEATHER_RAIN_ENOUGH_MM = 10; // 10 mm in 3 Tagen reicht generell
+var WEATHER_HARD_FROST_C = -5; // ab -5 Grad auch hardy=bedingt warnen
 
 function loadWeather() {
   // Cache-Check: nur heute gefetchte Daten gelten
@@ -4998,9 +5015,9 @@ function loadWeather() {
 }
 
 // Analysiert geladenes Wetter-Datenobjekt und liefert UI-relevante Hinweise.
-// Liefert {pastRainMm, frostDays, heatDays, soilTempNow, hasContent}.
+// Liefert {pastRainMm, frostDays, heatDays, soilTempNow, coldestMinC, hasContent}.
 function analyzeWeather(data) {
-  var out = {pastRainMm: 0, frostDays: [], heatDays: [], soilTempNow: null, hasContent: false};
+  var out = {pastRainMm: 0, frostDays: [], heatDays: [], soilTempNow: null, coldestMinC: null, hasContent: false};
   if (!data || !data.daily || !data.hourly) return out;
 
   var todayIso = toIsoDate(dayStart(new Date()));
@@ -5026,6 +5043,7 @@ function analyzeWeather(data) {
       var hi = parseFloat(maxT[j]);
       if (!isNaN(lo) && lo < WEATHER_FROST_C) {
         out.frostDays.push({date: times[j], minC: lo});
+        if (out.coldestMinC === null || lo < out.coldestMinC) out.coldestMinC = lo;
       }
       if (!isNaN(hi) && hi > WEATHER_HEAT_C) {
         out.heatDays.push({date: times[j], maxC: hi});
@@ -5067,6 +5085,25 @@ function weatherDayLabel(iso) {
   return WEATHER_DOW_DE[d.getDay()];
 }
 
+// Sammelt Outdoor-Pflanzen, die bei aktueller Frostprognose gefaehrdet sind.
+// includeBedingt=true: auch hardy=bedingt rein (bei strengem Frost <= -5 Grad).
+// Sortierung: hardy=nein zuerst, dann hardy=bedingt; alphabetisch innerhalb der Gruppen.
+function collectFrostAtRiskPlants(includeBedingt) {
+  if (!outdoorPlants || !outdoorPlants.length) return [];
+  var hits = outdoorPlants.filter(function(p) {
+    if (p.hardy === 'nein') return true;
+    if (includeBedingt && p.hardy === 'bedingt') return true;
+    return false;
+  });
+  hits.sort(function(a, b) {
+    var ra = a.hardy === 'nein' ? 0 : 1;
+    var rb = b.hardy === 'nein' ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+    return (a.name || '').localeCompare(b.name || '', 'de');
+  });
+  return hits;
+}
+
 function renderWeatherBanner() {
   var banner = document.getElementById('op-weather-banner');
   if (!banner) return;
@@ -5094,7 +5131,21 @@ function renderWeatherBanner() {
   if (info.frostDays.length > 0) {
     var fd = info.frostDays[0];
     var label = weatherDayLabel(fd.date);
-    lines.push('<div class="weather-banner-line"><strong>Frost '+label+'</strong> ('+fmtTemp(fd.minC)+') — Vlies bereit?</div>');
+    var frostLine = '<div class="weather-banner-line"><strong>Frost '+label+'</strong> ('+fmtTemp(fd.minC)+') — Vlies bereit?</div>';
+    // Pflanzenliste je nach Kaeltegrad: hardy=nein immer, hardy=bedingt nur bei strengem Frost
+    var includeBedingt = (info.coldestMinC !== null && info.coldestMinC <= WEATHER_HARD_FROST_C);
+    var atRisk = collectFrostAtRiskPlants(includeBedingt);
+    if (atRisk.length > 0) {
+      var listHtml = atRisk.map(function(p) {
+        var icon = (p.hardy === 'bedingt') ? '⚠️' : '❄️';
+        return '<span class="frost-plant-pill" title="'+esc(p.hardy === 'bedingt' ? 'bedingt winterhart' : 'nicht winterhart')+'">'+icon+' '+esc(p.name)+'</span>';
+      }).join(' ');
+      var hint = includeBedingt
+        ? 'Schutz fuer empfindliche und bedingt winterharte Pflanzen:'
+        : 'Schutz fuer empfindliche Pflanzen:';
+      frostLine += '<div class="weather-banner-line frost-plants"><span class="muted">'+hint+'</span> '+listHtml+'</div>';
+    }
+    lines.push(frostLine);
   }
   // Hitze
   if (info.heatDays.length > 0) {
