@@ -1395,6 +1395,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <input class="form-input" id="ff-desc" placeholder="NPK-Werte, Dosierung, Eigenschaften…" />
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Dosierungs-Hinweis</label>
+          <input class="form-input" id="ff-dosing" placeholder="z.B. 5 ml auf 1 L Wasser" />
+        </div>
+      </div>
       <div class="form-row" style="margin-bottom:.5rem">
         <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
           <input type="checkbox" id="ff-leer" style="width:16px;height:16px" />
@@ -2889,6 +2895,7 @@ function openFertForm() {
   document.getElementById('fert-form-title').textContent = 'Dünger hinzufügen';
   document.getElementById('ff-name').value = '';
   document.getElementById('ff-desc').value = '';
+  document.getElementById('ff-dosing').value = '';
   document.getElementById('ff-cat').value = 'green';
   document.getElementById('ff-usage').value = 'indoor';
   document.getElementById('ff-leer').checked = false;
@@ -2906,6 +2913,7 @@ function startEditFert(id) {
   document.getElementById('fert-form-title').textContent = 'Dünger bearbeiten ('+id+')';
   document.getElementById('ff-name').value = f.name || '';
   document.getElementById('ff-desc').value = f.desc || '';
+  document.getElementById('ff-dosing').value = f.dosing || '';
   document.getElementById('ff-cat').value = f.category || 'universal';
   document.getElementById('ff-usage').value = f.usage || 'indoor';
   document.getElementById('ff-leer').checked = !!f.leer;
@@ -2933,6 +2941,7 @@ function nextFertId() {
 function saveFertForm() {
   var name = document.getElementById('ff-name').value.trim();
   var desc = document.getElementById('ff-desc').value.trim();
+  var dosing = document.getElementById('ff-dosing').value.trim();
   var cat = document.getElementById('ff-cat').value;
   var usage = document.getElementById('ff-usage').value;
   var leer = document.getElementById('ff-leer').checked;
@@ -2944,16 +2953,16 @@ function saveFertForm() {
   document.getElementById('ff-err').textContent = '';
   apiFetch({
     action: isEdit ? 'updateFert' : 'addFert',
-    id: id, name: name, desc: desc, category: cat, usage: usage,
+    id: id, name: name, desc: desc, dosing: dosing, category: cat, usage: usage,
     leer: leer ? 'true' : 'false',
     active: active ? 'true' : 'false'
   }).then(function(res){
     if (res.ok) {
       if (isEdit) {
         var f = fertById(id);
-        if (f) { f.name=name; f.desc=desc; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
+        if (f) { f.name=name; f.desc=desc; f.dosing=dosing; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
       } else {
-        FERTS.push({id:id, name:name, desc:desc, category:cat, usage:usage, leer:leer, active:active});
+        FERTS.push({id:id, name:name, desc:desc, dosing:dosing, category:cat, usage:usage, leer:leer, active:active});
       }
       var wasNew = !isEdit;
       fertEditId = null;
@@ -3914,41 +3923,28 @@ function renderDetailCare(p) {
     meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am '+esc(dStr)+'</div>';
   }
 
-  // Dosis-Info: nur wenn Pflanze geduengt wird und Dosis-Felder gesetzt sind
-  var doseInfo = '';
-  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
-  if (fWeeks > 0 && (p.fertDoseGrowth || p.fertDoseDormant)) {
-    var phase = currentDosePhase(p);
-    var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
-    var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
-    var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
-    var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
-    var monthRange = '';
-    if (p.growthMonthStart && p.growthMonthEnd) {
-      var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-      var s = parseInt(p.growthMonthStart), e = parseInt(p.growthMonthEnd);
-      if (s >= 1 && s <= 12 && e >= 1 && e <= 12) {
-        monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
-      }
-    }
-    var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
-    var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
-    doseInfo =
-      '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
-        '<div style="font-weight:500;color:var(--g1);margin-bottom:4px">Aktuelle Düngung'+esc(monthRange)+'</div>'+
-        '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
-        (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
-      '</div>';
-  }
+  // Dosis-Info: editierbare Box (siehe renderDoseBox unten)
+  var doseInfo = renderDoseBox(p, !!doseEditOverride);
 
   var folds = CARE_S.map(function(s){
     var text = obj[s.key] || '–';
+    var extra = '';
+    // Bei Duengen-Sektion: Dosierungs-Hinweis vom zugeordneten Duenger anhaengen
+    if (s.key === 'duengen' && p.fertilizerId) {
+      var f = fertById(p.fertilizerId);
+      if (f && f.dosing) {
+        extra = '<div style="margin-top:10px;padding:8px 12px;background:var(--gl);border-left:3px solid '+s.color+';border-radius:4px;font-size:12px;line-height:1.5">'+
+          '<span style="color:var(--muted)">Dosierung '+esc(f.name)+': </span>'+
+          '<strong style="color:var(--text)">'+esc(f.dosing)+'</strong>'+
+        '</div>';
+      }
+    }
     return '<details class="detail-fold">'+
       '<summary>'+
         '<span class="detail-fold-icon">'+s.icon+'</span>'+
         '<span class="detail-fold-label" style="color:'+s.color+'">'+s.label+'</span>'+
       '</summary>'+
-      '<div class="detail-fold-content">'+esc(text)+'</div>'+
+      '<div class="detail-fold-content">'+esc(text)+extra+'</div>'+
     '</details>';
   }).join('');
 
@@ -3956,6 +3952,196 @@ function renderDetailCare(p) {
     '<div class="detail-actions">'+
       '<button class="btn sm ghost" id="detail-refresh-btn" onclick="refreshCarePlanInModal()">↻ Neu generieren</button>'+
     '</div>';
+}
+
+// Rendert die Dosierungs-Info-Box (Lese- oder Edit-Modus).
+// Lese-Modus: kompakte Anzeige der aktuellen Phase mit Stift-Icon zum Editieren.
+// Edit-Modus: Selects fuer beide Dosen + Wachstumsmonate, mit Speichern/Abbrechen.
+function renderDoseBox(p, editing) {
+  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
+  if (!fWeeks || fWeeks <= 0) return ''; // Pflanze wird nicht geduengt -> keine Box
+
+  var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  if (editing) {
+    var doseOpts = [
+      {v:'',         label:'– nicht gesetzt –'},
+      {v:'voll',     label:'● voll'},
+      {v:'halb',     label:'◐ halbe Dosis'},
+      {v:'viertel',  label:'◔ Viertel-Dosis'},
+      {v:'aussetzen',label:'○ pausieren'}
+    ];
+    function doseSelect(id, current) {
+      return '<select id="'+id+'" class="form-select" style="width:100%;background:white">'+
+        doseOpts.map(function(o){
+          var sel = (current === o.v) ? ' selected' : '';
+          return '<option value="'+o.v+'"'+sel+'>'+esc(o.label)+'</option>';
+        }).join('')+
+      '</select>';
+    }
+    function monthSelect(id, current) {
+      var cur = parseInt(current);
+      var opts = '<option value="">–</option>';
+      for (var i = 1; i <= 12; i++) {
+        var sel = (cur === i) ? ' selected' : '';
+        opts += '<option value="'+i+'"'+sel+'>'+months[i-1]+'</option>';
+      }
+      return '<select id="'+id+'" class="form-select" style="width:100%;background:white">'+opts+'</select>';
+    }
+
+    return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:12px 14px;margin-bottom:1rem;font-size:13px">'+
+      '<div style="font-weight:500;color:var(--g1);margin-bottom:10px">Düngung bearbeiten</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+        '<div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstumsphase</div>'+
+          doseSelect('dose-growth', p.fertDoseGrowth || '')+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ruhephase</div>'+
+          doseSelect('dose-dormant', p.fertDoseDormant || '')+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+        '<div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstum von</div>'+
+          monthSelect('dose-mstart', p.growthMonthStart)+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstum bis</div>'+
+          monthSelect('dose-mend', p.growthMonthEnd)+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+        '<button class="btn sm primary" onclick="saveDoseEdits()">Speichern</button>'+
+        '<button class="btn sm ghost" onclick="toggleDoseEdit(false)">Abbrechen</button>'+
+        '<span id="dose-edit-hint" style="font-size:12px;color:var(--muted)"></span>'+
+      '</div>'+
+    '</div>';
+  }
+
+  // Lesemodus
+  var hasAny = p.fertDoseGrowth || p.fertDoseDormant || p.growthMonthStart || p.growthMonthEnd;
+  if (!hasAny) {
+    // Kompakter Hinweis mit Editier-Knopf, wenn noch nichts gesetzt ist
+    return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+      '<span style="color:var(--muted)">Keine Dosierung hinterlegt.</span>'+
+      '<button class="btn sm ghost" onclick="toggleDoseEdit(true)" style="font-size:12px">✎ Bearbeiten</button>'+
+    '</div>';
+  }
+
+  var phase = currentDosePhase(p);
+  var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
+  var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
+  var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
+  var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
+  var monthRange = '';
+  if (p.growthMonthStart && p.growthMonthEnd) {
+    var s = parseInt(p.growthMonthStart), e = parseInt(p.growthMonthEnd);
+    if (s >= 1 && s <= 12 && e >= 1 && e <= 12) {
+      monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
+    }
+  }
+  var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
+  var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
+
+  return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'+
+      '<span style="font-weight:500;color:var(--g1)">Aktuelle Düngung'+esc(monthRange)+'</span>'+
+      '<button class="btn sm ghost" onclick="toggleDoseEdit(true)" title="Dosierung bearbeiten" style="font-size:11px;padding:2px 8px">✎</button>'+
+    '</div>'+
+    '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
+    (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
+  '</div>';
+}
+
+// Schaltet zwischen Lese- und Edit-Modus der Dosis-Box. Re-rendert nur den Pflegeplan-Tab.
+function toggleDoseEdit(editing) {
+  if (!detailPlantId) return;
+  var p = plants.find(function(x){return x.id===detailPlantId;});
+  if (!p) return;
+  // renderDetailCare neu aufrufen, aber doseInfo-Render-Modus durch Flag steuern
+  var box = document.getElementById('detail-panel-care');
+  if (!box) return;
+  // Zustand merken: wir muessten renderDetailCare anpassen, oder einfacher: nur die Box ersetzen.
+  // Statt komplettem Re-Render: nur die erste Dosis-Box im Panel austauschen.
+  var newBoxHtml = renderDoseBox(p, editing);
+  // Suche das erste Element im box, das die alte Dosis-Box ist (anhand des Texts).
+  // Pragmatischer: komplettes Re-Render des Pflegeplan-Panels mit Override-Flag.
+  doseEditOverride = editing;
+  renderDetailCare(p);
+  doseEditOverride = false;
+}
+
+// Override-Flag fuer renderDetailCare: wenn true, wird Dosis-Box im Edit-Modus gerendert.
+var doseEditOverride = false;
+
+// Speichert die im Edit-Modus eingegebenen Dosis-Werte.
+function saveDoseEdits() {
+  if (!detailPlantId) return;
+  var p = plants.find(function(x){return x.id===detailPlantId;});
+  if (!p) return;
+  var hint = document.getElementById('dose-edit-hint');
+  var validDoses = ['','voll','halb','viertel','aussetzen'];
+  var growth = document.getElementById('dose-growth').value;
+  var dormant = document.getElementById('dose-dormant').value;
+  var mStart = document.getElementById('dose-mstart').value;
+  var mEnd = document.getElementById('dose-mend').value;
+  if (validDoses.indexOf(growth) < 0) { if (hint) hint.textContent = 'Ungueltige Wachstums-Dosis'; return; }
+  if (validDoses.indexOf(dormant) < 0) { if (hint) hint.textContent = 'Ungueltige Ruhe-Dosis'; return; }
+  // Monate: leer ist ok, sonst 1..12
+  function validMonth(m) {
+    if (m === '' || m === null) return true;
+    var n = parseInt(m);
+    return !isNaN(n) && n >= 1 && n <= 12;
+  }
+  if (!validMonth(mStart) || !validMonth(mEnd)) { if (hint) hint.textContent = 'Ungueltiger Monat'; return; }
+  // Beide Monate gesetzt oder beide leer (Konsistenz)
+  if ((mStart === '' && mEnd !== '') || (mStart !== '' && mEnd === '')) {
+    if (hint) hint.textContent = 'Beide Monate setzen oder beide leer'; return;
+  }
+
+  // Vorherige Werte fuer Rollback
+  var prev = {
+    fertDoseGrowth: p.fertDoseGrowth || '',
+    fertDoseDormant: p.fertDoseDormant || '',
+    growthMonthStart: p.growthMonthStart || '',
+    growthMonthEnd: p.growthMonthEnd || ''
+  };
+  // Optimistisches Update
+  p.fertDoseGrowth = growth;
+  p.fertDoseDormant = dormant;
+  p.growthMonthStart = mStart;
+  p.growthMonthEnd = mEnd;
+
+  if (hint) hint.textContent = 'Speichert…';
+  apiFetch({
+    action: 'update', id: p.id,
+    fertDoseGrowth: growth,
+    fertDoseDormant: dormant,
+    growthMonthStart: mStart,
+    growthMonthEnd: mEnd
+  }).then(function(res){
+    if (res.ok) {
+      toast('Dosierung gespeichert');
+      // Zurueck in Lesemodus + ggf. Karten-Badge aktualisieren
+      doseEditOverride = false;
+      renderDetailCare(p);
+      renderGrid();
+    } else {
+      // Rollback
+      p.fertDoseGrowth = prev.fertDoseGrowth;
+      p.fertDoseDormant = prev.fertDoseDormant;
+      p.growthMonthStart = prev.growthMonthStart;
+      p.growthMonthEnd = prev.growthMonthEnd;
+      if (hint) hint.textContent = 'Fehler: '+(res.error||'?');
+    }
+  }).catch(function(){
+    p.fertDoseGrowth = prev.fertDoseGrowth;
+    p.fertDoseDormant = prev.fertDoseDormant;
+    p.growthMonthStart = prev.growthMonthStart;
+    p.growthMonthEnd = prev.growthMonthEnd;
+    if (hint) hint.textContent = 'Verbindungsfehler';
+  });
 }
 
 // Pflegeplan im Detail-Modal neu generieren, ohne Tab-Wechsel
