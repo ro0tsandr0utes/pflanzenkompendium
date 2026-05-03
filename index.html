@@ -1102,16 +1102,10 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <option value="keine">keine</option>
         </select>
       </div>
-      <div class="form-group" style="max-width:140px">
+      <div class="form-group" style="max-width:160px">
         <label class="form-label">Kreislauf</label>
         <select class="form-select" id="z-irr-circuit">
           <option value="">—</option>
-          <option value="K1">K1</option>
-          <option value="K2">K2</option>
-          <option value="K3">K3</option>
-          <option value="K4">K4</option>
-          <option value="K5">K5</option>
-          <option value="K6">K6</option>
         </select>
       </div>
     </div>
@@ -4661,7 +4655,19 @@ function openZonesPanel() {
       ZONES = res.data || [];
     }
     zonesLoaded = true;
-    renderZoneGrid();
+    // CIRCUITS parallel laden, damit renderZoneWaterPill Plan-aware ist
+    if (!circuitsLoaded) {
+      apiFetch({action: 'getCircuits'}).then(function(cres) {
+        if (cres && cres.ok) CIRCUITS = cres.data || [];
+        circuitsLoaded = true;
+        renderZoneGrid();
+      }).catch(function(){
+        circuitsLoaded = true;
+        renderZoneGrid();
+      });
+    } else {
+      renderZoneGrid();
+    }
   }).catch(function() {
     toast('Verbindungsfehler');
     ZONES = [];
@@ -4748,6 +4754,57 @@ function renderZoneWaterPill(z) {
   if (z.irrigationGroup === 'keine') return '';
   var info = analyzeWeather(WEATHER_DATA);
   var mm = info.pastRainMm;
+
+  // Plan-aware (Phase O8): Bereich auf Kreislauf zugeordnet?
+  var circuit = (z.irrigationCircuit && CIRCUITS && CIRCUITS.length)
+    ? CIRCUITS.find(function(c){return c.id === z.irrigationCircuit;})
+    : null;
+
+  // === Pfad 1: Bereich hat Kreislauf -> immer Plan-Status, nie Aufforderung ===
+  if (circuit) {
+    // Saison-Pause
+    if (circuit.active === 'false' || circuit.active === false) {
+      return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' ist auf Saison-Pause">⏸ Pause</span>';
+    }
+    // Heute laeuft gerade
+    var today = circuitTodayStatus(circuit);
+    if (today.runningNow) {
+      return '<span class="zone-pill water-ok" title="Bewässerung läuft gerade ('+esc(circuit.id)+')">💧 läuft jetzt</span>';
+    }
+    if (today.alreadyRan) {
+      var titleOk = 'Plan ' + circuit.id + ' lief heute morgen' +
+        (today.expectedMm > 0 ? ' (~' + today.expectedMm + ' mm)' : '');
+      return '<span class="zone-pill water-ok" title="'+esc(titleOk)+'">💧 heute bewässert</span>';
+    }
+    // Variante C: gestern ausgesetzt wegen Regen
+    var yesterday = circuitDidRunYesterday(circuit, info);
+    if (yesterday.planned && !yesterday.ranYesterday) {
+      var titleSkip = 'Plan ' + circuit.id + ' gestern uebersprungen (Regensensor: ' + yesterday.yesterdayRainMm + ' mm Regen >= ' + yesterday.expectedMm + ' mm Plan)';
+      return '<span class="zone-pill water-ok" title="'+esc(titleSkip)+'">🌧️ Regen gestern</span>';
+    }
+    // Naechster Plan-Lauf
+    var next = circuitNextRun(circuit);
+    if (next.daysUntil === 0) {
+      var titlePlan = 'Plan ' + circuit.id + ' laeuft heute um ' + circuit.startTime +
+        (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
+      return '<span class="zone-pill water-low" title="'+esc(titlePlan)+'">⏰ Plan ' + esc(circuit.startTime) + '</span>';
+    }
+    if (next.daysUntil === 1) {
+      var titleTom = 'Plan ' + circuit.id + ' laeuft morgen um ' + circuit.startTime +
+        (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
+      return '<span class="zone-pill water-low" title="'+esc(titleTom)+'">⏰ Plan morgen</span>';
+    }
+    if (next.daysUntil !== null) {
+      var titleNext = 'Naechster Plan-Lauf von ' + circuit.id + ' ' + next.dayLabel +
+        ' um ' + circuit.startTime +
+        (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
+      return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="'+esc(titleNext)+'">📅 Plan ' + esc(next.dayLabel) + '</span>';
+    }
+    // Kreislauf aktiv aber keine Plan-Tage gesetzt -> Konfigurations-Hinweis
+    return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' aktiv, aber keine Tage hinterlegt">⚠ Plan unvollständig</span>';
+  }
+
+  // === Pfad 2: Kein Kreislauf -> manuelle Bewaesserung, alte Regen-Logik ===
   var cls, label, title;
   if (mm >= WEATHER_RAIN_ENOUGH_MM) {
     cls = 'water-ok'; label = '🌧️ Regen ok';
@@ -4775,13 +4832,49 @@ function openZoneForm(zoneId) {
   document.getElementById('z-soil').value         = z ? (z.soil || '') : '';
   document.getElementById('z-area').value         = z ? (z.areaM2 || '') : '';
   document.getElementById('z-irr-group').value    = z ? (z.irrigationGroup || '') : '';
-  document.getElementById('z-irr-circuit').value  = z ? (z.irrigationCircuit || '') : '';
+  populateZoneCircuitDropdown(z ? z.irrigationCircuit : '');
   document.getElementById('z-notes').value        = z ? (z.notes || '') : '';
   document.getElementById('z-err').textContent = '';
   document.getElementById('z-delete-btn').style.display = isEdit ? 'inline-flex' : 'none';
   updateZoneIrrCircuitState();
   document.getElementById('zone-overlay').classList.remove('hidden');
   document.getElementById('z-name').focus();
+
+  // Lazy: Kreislauf-Liste laden, falls Bewaesserungs-Tab noch nicht besucht wurde,
+  // und Dropdown nach Eintreffen neu befuellen.
+  if (!circuitsLoaded) {
+    apiFetch({action: 'getCircuits'}).then(function(res) {
+      if (res && res.ok) CIRCUITS = res.data || [];
+      circuitsLoaded = true;
+      // Aktuell ausgewaehlten Wert beibehalten
+      var current = document.getElementById('z-irr-circuit').value;
+      populateZoneCircuitDropdown(current);
+    }).catch(function(){ /* still */ });
+  }
+}
+
+// Befuellt das Kreislauf-Dropdown im Bereich-Form aus CIRCUITS.
+// Behaelt bestehenden Wert, wenn er weiterhin gueltig ist.
+function populateZoneCircuitDropdown(selectedId) {
+  var sel = document.getElementById('z-irr-circuit');
+  if (!sel) return;
+  // Nach ID alphanumerisch sortieren
+  var sorted = (CIRCUITS || []).slice().sort(function(a, b) {
+    return (a.id || '').localeCompare(b.id || '', 'de');
+  });
+  var opts = '<option value="">—</option>';
+  sorted.forEach(function(c) {
+    var label = c.id;
+    if (c.name && c.name !== c.id) label += ' · ' + c.name;
+    var inactive = (c.active === 'false' || c.active === false) ? ' (Pause)' : '';
+    opts += '<option value="' + esc(c.id) + '">' + esc(label + inactive) + '</option>';
+  });
+  // Falls die aktuell selektierte ID nicht (mehr) in der Liste ist, als Stub anhaengen
+  if (selectedId && !sorted.some(function(c){return c.id === selectedId;})) {
+    opts += '<option value="' + esc(selectedId) + '">' + esc(selectedId + ' (unbekannt)') + '</option>';
+  }
+  sel.innerHTML = opts;
+  sel.value = selectedId || '';
 }
 
 function closeZoneForm() {
@@ -5594,17 +5687,23 @@ function openOutdoorPanel() {
   grid.innerHTML = '<div class="care-placeholder">Lade Outdoor-Pflanzen…</div>';
   document.getElementById('op-empty').style.display = 'none';
 
-  // Beide parallel laden: Pflanzen und Bereiche (falls noch nicht geladen)
+  // Drei parallel laden: Pflanzen, Bereiche, Kreislaeufe (falls noch nicht geladen)
   var pPlants = apiFetch({action: 'getOutdoorPlants'});
   var pZones = zonesLoaded ? Promise.resolve({ok:true, data:ZONES}) : apiFetch({action: 'getZones'});
+  var pCircuits = circuitsLoaded ? Promise.resolve({ok:true, data:CIRCUITS}) : apiFetch({action: 'getCircuits'});
 
-  Promise.all([pPlants, pZones]).then(function(results) {
+  Promise.all([pPlants, pZones, pCircuits]).then(function(results) {
     var resPlants = results[0];
     var resZones = results[1];
+    var resCircuits = results[2];
     outdoorPlants = (resPlants && resPlants.ok && Array.isArray(resPlants.data)) ? resPlants.data : [];
     if (!zonesLoaded && resZones && resZones.ok && Array.isArray(resZones.data)) {
       ZONES = resZones.data;
       zonesLoaded = true;
+    }
+    if (!circuitsLoaded && resCircuits && resCircuits.ok && Array.isArray(resCircuits.data)) {
+      CIRCUITS = resCircuits.data;
+      circuitsLoaded = true;
     }
     outdoorPlantsLoaded = true;
     populateOutdoorFilters();
@@ -5709,10 +5808,13 @@ function loadWeather() {
 // Analysiert geladenes Wetter-Datenobjekt und liefert UI-relevante Hinweise.
 // Liefert {pastRainMm, frostDays, heatDays, soilTempNow, coldestMinC, hasContent}.
 function analyzeWeather(data) {
-  var out = {pastRainMm: 0, frostDays: [], heatDays: [], soilTempNow: null, coldestMinC: null, hasContent: false};
+  var out = {pastRainMm: 0, yesterdayRainMm: 0, forecastRainMm: 0, forecastByDate: {}, frostDays: [], heatDays: [], soilTempNow: null, coldestMinC: null, hasContent: false};
   if (!data || !data.daily || !data.hourly) return out;
 
   var todayIso = toIsoDate(dayStart(new Date()));
+  var yesterdayIso = toIsoDate(dayStart(new Date(Date.now() - 86400000)));
+  var tomorrowIso = toIsoDate(dayStart(new Date(Date.now() + 86400000)));
+  var dayAfterIso = toIsoDate(dayStart(new Date(Date.now() + 2 * 86400000)));
   var daily = data.daily;
   var times = daily.time || [];
   var maxT = daily.temperature_2m_max || [];
@@ -5725,8 +5827,19 @@ function analyzeWeather(data) {
       var v = parseFloat(rain[i]);
       if (!isNaN(v)) out.pastRainMm += v;
     }
+    // Niederschlag pro Tag fuer die Plan-vs-Regen-Logik (Variante C, Vortag-Warnung)
+    var rv = parseFloat(rain[i]);
+    if (!isNaN(rv)) out.forecastByDate[times[i]] = rv;
+    // Gestrigen Tag separat
+    if (times[i] === yesterdayIso && !isNaN(rv)) out.yesterdayRainMm = rv;
+    // Forecast morgen+uebermorgen
+    if ((times[i] === tomorrowIso || times[i] === dayAfterIso) && !isNaN(rv)) {
+      out.forecastRainMm += rv;
+    }
   }
   out.pastRainMm = Math.round(out.pastRainMm * 10) / 10;
+  out.yesterdayRainMm = Math.round(out.yesterdayRainMm * 10) / 10;
+  out.forecastRainMm = Math.round(out.forecastRainMm * 10) / 10;
 
   // Zukuenftige Frost-/Hitze-Tage (heute und danach)
   for (var j = 0; j < times.length; j++) {
@@ -5762,7 +5875,7 @@ function analyzeWeather(data) {
     }
   }
 
-  out.hasContent = out.pastRainMm > 0 || out.frostDays.length > 0 || out.heatDays.length > 0 || out.soilTempNow !== null;
+  out.hasContent = out.pastRainMm > 0 || out.frostDays.length > 0 || out.heatDays.length > 0 || out.soilTempNow !== null || out.forecastRainMm > 0;
   return out;
 }
 
@@ -5794,6 +5907,152 @@ function collectFrostAtRiskPlants(includeBedingt) {
     return (a.name || '').localeCompare(b.name || '', 'de');
   });
   return hits;
+}
+
+// === Bewaesserungsplan-Helper (Phase O8) ===
+
+// Wochentags-Key fuer ein Date oder ISO-String. Liefert "Mo", "Di", ...
+function weekdayKey(dateOrIso) {
+  var d = (typeof dateOrIso === 'string') ? new Date(dateOrIso) : dateOrIso;
+  // getDay(): 0=So, 1=Mo, ..., 6=Sa
+  return ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
+}
+
+// Erwartete Wassergabe (mm) fuer einen Plan-Lauf.
+// 0 wenn flowMmPerHour unbekannt - Aufrufer muss Fallback handhaben.
+function circuitExpectedMm(c) {
+  var flow = parseFloat(c.flowMmPerHour);
+  var dur = parseInt(c.durationMin, 10);
+  if (!flow || !dur || flow <= 0 || dur <= 0) return 0;
+  return Math.round(flow * dur / 60 * 10) / 10;
+}
+
+// Liefert die aktiven Kreislaeufe, die fuer einen bestimmten Wochentag laufen.
+// dayKey: "Mo".."So". onlyActive=true: nur die mit active=true und Tagen+Plan.
+function circuitsForDay(dayKey, onlyActive) {
+  if (!CIRCUITS || !CIRCUITS.length) return [];
+  return CIRCUITS.filter(function(c) {
+    if (onlyActive && (c.active === 'false' || c.active === false)) return false;
+    if (!c.startTime || !c.durationMin) return false;
+    var days = parseDays(c.days);
+    return !!days[dayKey];
+  });
+}
+
+// Variante C: Hat der Plan-Lauf von gestern wahrscheinlich stattgefunden,
+// oder hat der Regensensor des Steuergeraets ihn ausgesetzt?
+// Heuristik: wenn gestriger Niederschlag >= erwarteter Wassergabe der gestern
+// fuer diesen Kreislauf vorgesehenen Plan-Laeufe, dann angenommen UEBERSPRUNGEN.
+// circuit: einzelner Kreislauf-Datensatz.
+// info: analyzeWeather-Output mit forecastByDate.
+// Liefert: { ranYesterday: bool, expectedMm: float, yesterdayRainMm: float }
+function circuitDidRunYesterday(circuit, info) {
+  var yesterday = new Date(Date.now() - 86400000);
+  var yKey = weekdayKey(yesterday);
+  var days = parseDays(circuit.days);
+  var planned = !!days[yKey] && (circuit.active !== 'false' && circuit.active !== false);
+  var expected = circuitExpectedMm(circuit);
+  var rain = info.yesterdayRainMm || 0;
+  if (!planned) return {ranYesterday: false, expectedMm: 0, yesterdayRainMm: rain, planned: false};
+  // Wenn Wassergabe unbekannt (0): kann nicht entscheiden -> annehmen "lief"
+  if (expected <= 0) return {ranYesterday: true, expectedMm: 0, yesterdayRainMm: rain, planned: true};
+  // Regensensor-Aussetzung: Regen >= Wassergabe -> uebersprungen
+  var ran = rain < expected;
+  return {ranYesterday: ran, expectedMm: expected, yesterdayRainMm: rain, planned: true};
+}
+
+// Hat der Plan-Lauf von HEUTE schon stattgefunden (Zeitbasiert)?
+// Liefert: {plannedToday, alreadyRan, expectedMm, startTime}
+function circuitTodayStatus(circuit) {
+  var todayKey = weekdayKey(new Date());
+  var days = parseDays(circuit.days);
+  var planned = !!days[todayKey] && (circuit.active !== 'false' && circuit.active !== false)
+                && circuit.startTime && circuit.durationMin;
+  if (!planned) return {plannedToday: false, alreadyRan: false, expectedMm: 0, startTime: null};
+  // Startzeit parsen
+  var st = String(circuit.startTime || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!st) return {plannedToday: true, alreadyRan: false, expectedMm: circuitExpectedMm(circuit), startTime: circuit.startTime};
+  var now = new Date();
+  var planTime = new Date();
+  planTime.setHours(parseInt(st[1], 10), parseInt(st[2], 10), 0, 0);
+  // "lief schon" wenn Startzeit + Dauer in der Vergangenheit liegt
+  var dur = parseInt(circuit.durationMin, 10) || 0;
+  var endTime = new Date(planTime.getTime() + dur * 60000);
+  return {
+    plannedToday: true,
+    alreadyRan: now > endTime,
+    runningNow: now >= planTime && now <= endTime,
+    expectedMm: circuitExpectedMm(circuit),
+    startTime: circuit.startTime
+  };
+}
+
+// Naechster Plan-Lauf in den naechsten 7 Tagen.
+// Liefert: {daysUntil: 0..7|null, dayLabel, expectedMm}
+//   daysUntil=0  -> heute spaeter
+//   daysUntil=1  -> morgen
+//   daysUntil=2..7 -> in N Tagen
+//   daysUntil=null -> kein Plan in 7 Tagen
+// Geht heute NICHT mit, wenn der heutige Plan-Lauf bereits durch ist.
+function circuitNextRun(circuit) {
+  if (!circuit.startTime || !circuit.durationMin) return {daysUntil: null};
+  if (circuit.active === 'false' || circuit.active === false) return {daysUntil: null};
+  var days = parseDays(circuit.days);
+  var todayStatus = circuitTodayStatus(circuit);
+  // Heute laeuft Plan und ist noch nicht durch
+  if (todayStatus.plannedToday && !todayStatus.alreadyRan) {
+    return {daysUntil: 0, dayLabel: 'heute', expectedMm: todayStatus.expectedMm};
+  }
+  // Sonst: ab morgen 7 Tage durchgehen
+  for (var i = 1; i <= 7; i++) {
+    var d = new Date(Date.now() + i * 86400000);
+    var k = weekdayKey(d);
+    if (days[k]) {
+      var label = i === 1 ? 'morgen' : ('in ' + i + ' Tagen');
+      return {daysUntil: i, dayLabel: label, expectedMm: circuitExpectedMm(circuit)};
+    }
+  }
+  return {daysUntil: null};
+}
+
+// Vortag-Warnung: Welche Kreislaeufe laufen MORGEN, und sollte man am
+// Steuergeraet aussetzen? Erscheint nur ab 12:00 Mittag des Vortags.
+// Liefert: {circuits: [{c, expectedMm}], totalExpectedMm, forecastMm, severity}
+//   severity: '' (kein Hinweis), 'soft' (kannst aussetzen), 'hard' (solltest aussetzen)
+function tomorrowIrrigationConflict(info) {
+  var now = new Date();
+  // Nur ab 12:00 Mittag anzeigen
+  if (now.getHours() < 12) return {severity: '', circuits: []};
+  var tomorrow = new Date(now.getTime() + 86400000);
+  var tomKey = weekdayKey(tomorrow);
+  var planned = circuitsForDay(tomKey, true);
+  if (!planned.length) return {severity: '', circuits: []};
+
+  var totalExpected = 0;
+  var anyKnown = false;
+  var entries = planned.map(function(c) {
+    var mm = circuitExpectedMm(c);
+    if (mm > 0) anyKnown = true;
+    totalExpected += mm;
+    return {c: c, expectedMm: mm};
+  });
+
+  var forecast = info.forecastRainMm || 0;
+  var severity = '';
+  if (anyKnown && totalExpected > 0) {
+    if (forecast >= totalExpected * 2.0) severity = 'hard';
+    else if (forecast >= totalExpected * 1.5) severity = 'soft';
+  } else {
+    // Keine bekannte Wassergabe -> einfacher Schwellwert
+    if (forecast >= 15) severity = 'hard';
+    else if (forecast >= 10) severity = 'soft';
+  }
+  return {
+    severity: severity,
+    circuits: entries,
+    totalExpectedMm: Math.round(totalExpected * 10) / 10,
+    forecastMm: forecast
+  };
 }
 
 function renderWeatherBanner() {
@@ -5845,6 +6104,19 @@ function renderWeatherBanner() {
     var hlabel = weatherDayLabel(hd.date);
     lines.push('<div class="weather-banner-line"><strong>Hitze '+hlabel+'</strong> ('+fmtTemp(hd.maxC)+') — zusätzlich gießen.</div>');
   }
+  // Bewaesserungs-Konflikt: morgen Plan + Forecast Regen (Phase O8)
+  var conflict = tomorrowIrrigationConflict(info);
+  if (conflict.severity) {
+    var ids = conflict.circuits.map(function(e){ return e.c.id; }).join(', ');
+    var verb = conflict.severity === 'hard' ? 'Solltest aussetzen' : 'Kannst aussetzen';
+    var detail = '';
+    if (conflict.totalExpectedMm > 0) {
+      detail = '~' + conflict.totalExpectedMm + ' mm geplant, Forecast ' + conflict.forecastMm + ' mm Regen';
+    } else {
+      detail = 'Forecast ' + conflict.forecastMm + ' mm Regen';
+    }
+    lines.push('<div class="weather-banner-line"><strong>Morgen früh: '+esc(ids)+'</strong> — '+verb+' am Steuergerät. <span class="muted">('+esc(detail)+')</span></div>');
+  }
   // Bodentemperatur (nur wenn kalt)
   if (info.soilTempNow !== null && info.soilTempNow < WEATHER_SOIL_COLD_C) {
     lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+' — zu kalt für Tomaten/Gurken.</div>');
@@ -5852,11 +6124,12 @@ function renderWeatherBanner() {
     lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+'.</div>');
   }
 
-  // Banner-Stil: danger bei Frost, warn bei Hitze, sonst neutral
+  // Banner-Stil: danger bei Frost, warn bei Hitze oder hartem Bewaesserungs-Konflikt, sonst neutral
   var cls = 'weather-banner';
   var icon = '🌦️';
   if (info.frostDays.length > 0) { cls += ' danger'; icon = '❄️'; }
   else if (info.heatDays.length > 0) { cls += ' warn'; icon = '☀️'; }
+  else if (conflict.severity === 'hard') { cls += ' warn'; icon = '💧'; }
   else if (info.pastRainMm >= WEATHER_RAIN_ENOUGH_MM) { icon = '🌧️'; }
 
   banner.className = cls;
