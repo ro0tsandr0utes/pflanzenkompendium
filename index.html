@@ -4760,48 +4760,72 @@ function renderZoneWaterPill(z) {
     ? CIRCUITS.find(function(c){return c.id === z.irrigationCircuit;})
     : null;
 
+  // Defizit-Pille (Phase O9) - kommt zusaetzlich zur Status-Pille
+  var deficitPill = '';
+  if (circuit && (circuit.active !== 'false' && circuit.active !== false)) {
+    var bal = zoneWaterBalance(z, info);
+    if (bal && bal.severity) {
+      var defTitle = 'Wasserbilanz: ' + bal.projected + ' mm Saldo nach naechstem Plan-Lauf' +
+        ' (Schwelle gelb ' + bal.threshold.yellow + ' mm, rot ' + bal.threshold.red + ' mm)';
+      if (bal.severity === 'red') {
+        deficitPill = '<span class="zone-pill water-dry" style="background:#fde7e7;border-color:#e88;color:#a33" title="'+esc(defTitle)+'">⚠ dringend zusätzlich gießen</span>';
+      } else {
+        deficitPill = '<span class="zone-pill water-low" title="'+esc(defTitle)+'">💧 zusätzlich gießen</span>';
+      }
+    }
+  }
+
   // === Pfad 1: Bereich hat Kreislauf -> immer Plan-Status, nie Aufforderung ===
   if (circuit) {
+    var statusPill = '';
     // Saison-Pause
     if (circuit.active === 'false' || circuit.active === false) {
-      return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' ist auf Saison-Pause">⏸ Pause</span>';
+      statusPill = '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' ist auf Saison-Pause">⏸ Pause</span>';
+      return statusPill + deficitPill;
     }
     // Heute laeuft gerade
     var today = circuitTodayStatus(circuit);
     if (today.runningNow) {
-      return '<span class="zone-pill water-ok" title="Bewässerung läuft gerade ('+esc(circuit.id)+')">💧 läuft jetzt</span>';
+      statusPill = '<span class="zone-pill water-ok" title="Bewässerung läuft gerade ('+esc(circuit.id)+')">💧 läuft jetzt</span>';
+      return statusPill + deficitPill;
     }
     if (today.alreadyRan) {
       var titleOk = 'Plan ' + circuit.id + ' lief heute morgen' +
         (today.expectedMm > 0 ? ' (~' + today.expectedMm + ' mm)' : '');
-      return '<span class="zone-pill water-ok" title="'+esc(titleOk)+'">💧 heute bewässert</span>';
+      statusPill = '<span class="zone-pill water-ok" title="'+esc(titleOk)+'">💧 heute bewässert</span>';
+      return statusPill + deficitPill;
     }
     // Variante C: gestern ausgesetzt wegen Regen
     var yesterday = circuitDidRunYesterday(circuit, info);
     if (yesterday.planned && !yesterday.ranYesterday) {
       var titleSkip = 'Plan ' + circuit.id + ' gestern uebersprungen (Regensensor: ' + yesterday.yesterdayRainMm + ' mm Regen >= ' + yesterday.expectedMm + ' mm Plan)';
-      return '<span class="zone-pill water-ok" title="'+esc(titleSkip)+'">🌧️ Regen gestern</span>';
+      statusPill = '<span class="zone-pill water-ok" title="'+esc(titleSkip)+'">🌧️ Regen gestern</span>';
+      return statusPill + deficitPill;
     }
     // Naechster Plan-Lauf
     var next = circuitNextRun(circuit);
     if (next.daysUntil === 0) {
       var titlePlan = 'Plan ' + circuit.id + ' laeuft heute um ' + circuit.startTime +
         (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
-      return '<span class="zone-pill water-low" title="'+esc(titlePlan)+'">⏰ Plan ' + esc(circuit.startTime) + '</span>';
+      statusPill = '<span class="zone-pill water-low" title="'+esc(titlePlan)+'">⏰ Plan ' + esc(circuit.startTime) + '</span>';
+      return statusPill + deficitPill;
     }
     if (next.daysUntil === 1) {
       var titleTom = 'Plan ' + circuit.id + ' laeuft morgen um ' + circuit.startTime +
         (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
-      return '<span class="zone-pill water-low" title="'+esc(titleTom)+'">⏰ Plan morgen</span>';
+      statusPill = '<span class="zone-pill water-low" title="'+esc(titleTom)+'">⏰ Plan morgen</span>';
+      return statusPill + deficitPill;
     }
     if (next.daysUntil !== null) {
       var titleNext = 'Naechster Plan-Lauf von ' + circuit.id + ' ' + next.dayLabel +
         ' um ' + circuit.startTime +
         (next.expectedMm > 0 ? ' (~' + next.expectedMm + ' mm)' : '');
-      return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="'+esc(titleNext)+'">📅 Plan ' + esc(next.dayLabel) + '</span>';
+      statusPill = '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="'+esc(titleNext)+'">📅 Plan ' + esc(next.dayLabel) + '</span>';
+      return statusPill + deficitPill;
     }
     // Kreislauf aktiv aber keine Plan-Tage gesetzt -> Konfigurations-Hinweis
-    return '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' aktiv, aber keine Tage hinterlegt">⚠ Plan unvollständig</span>';
+    statusPill = '<span class="zone-pill" style="background:var(--bg);color:var(--muted)" title="Kreislauf '+esc(circuit.id)+' aktiv, aber keine Tage hinterlegt">⚠ Plan unvollständig</span>';
+    return statusPill + deficitPill;
   }
 
   // === Pfad 2: Kein Kreislauf -> manuelle Bewaesserung, alte Regen-Logik ===
@@ -4835,7 +4859,7 @@ function openZoneForm(zoneId) {
   populateZoneCircuitDropdown(z ? z.irrigationCircuit : '');
   document.getElementById('z-notes').value        = z ? (z.notes || '') : '';
   document.getElementById('z-err').textContent = '';
-  document.getElementById('z-delete-btn').style.display = isEdit ? 'inline-flex' : 'none';
+  document.getElementById('z-delete-btn').style.display = isEdit ? '' : 'none';
   updateZoneIrrCircuitState();
   document.getElementById('zone-overlay').classList.remove('hidden');
   document.getElementById('z-name').focus();
@@ -5781,9 +5805,9 @@ function loadWeather() {
   var url = 'https://api.open-meteo.com/v1/forecast' +
     '?latitude=' + WEATHER_LAT +
     '&longitude=' + WEATHER_LNG +
-    '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum' +
+    '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration' +
     '&hourly=soil_temperature_6cm' +
-    '&past_days=3' +
+    '&past_days=7' +
     '&forecast_days=3' +
     '&timezone=Europe%2FBerlin' +
     '&models=icon_seamless';
@@ -5808,7 +5832,7 @@ function loadWeather() {
 // Analysiert geladenes Wetter-Datenobjekt und liefert UI-relevante Hinweise.
 // Liefert {pastRainMm, frostDays, heatDays, soilTempNow, coldestMinC, hasContent}.
 function analyzeWeather(data) {
-  var out = {pastRainMm: 0, yesterdayRainMm: 0, forecastRainMm: 0, forecastByDate: {}, frostDays: [], heatDays: [], soilTempNow: null, coldestMinC: null, hasContent: false};
+  var out = {pastRainMm: 0, yesterdayRainMm: 0, forecastRainMm: 0, forecastByDate: {}, et0ByDate: {}, frostDays: [], heatDays: [], soilTempNow: null, coldestMinC: null, hasContent: false};
   if (!data || !data.daily || !data.hourly) return out;
 
   var todayIso = toIsoDate(dayStart(new Date()));
@@ -5820,16 +5844,22 @@ function analyzeWeather(data) {
   var maxT = daily.temperature_2m_max || [];
   var minT = daily.temperature_2m_min || [];
   var rain = daily.precipitation_sum || [];
+  var et0 = daily.et0_fao_evapotranspiration || [];
 
-  // Vergangene 3 Tage Niederschlag aufsummieren (alle Tage VOR heute)
+  var threeDaysAgoIso = toIsoDate(dayStart(new Date(Date.now() - 3 * 86400000)));
+
+  // Vergangene 3 Tage Niederschlag aufsummieren (alle Tage VOR heute, mind. 3-Tage-Fenster)
   for (var i = 0; i < times.length; i++) {
-    if (times[i] < todayIso) {
+    if (times[i] < todayIso && times[i] >= threeDaysAgoIso) {
       var v = parseFloat(rain[i]);
       if (!isNaN(v)) out.pastRainMm += v;
     }
     // Niederschlag pro Tag fuer die Plan-vs-Regen-Logik (Variante C, Vortag-Warnung)
     var rv = parseFloat(rain[i]);
     if (!isNaN(rv)) out.forecastByDate[times[i]] = rv;
+    // ET₀ pro Tag fuer die Wasserbilanz (Phase O9)
+    var ev = parseFloat(et0[i]);
+    if (!isNaN(ev)) out.et0ByDate[times[i]] = ev;
     // Gestrigen Tag separat
     if (times[i] === yesterdayIso && !isNaN(rv)) out.yesterdayRainMm = rv;
     // Forecast morgen+uebermorgen
@@ -6055,6 +6085,171 @@ function tomorrowIrrigationConflict(info) {
   };
 }
 
+// === Wasserbilanz (Phase O9) ===
+
+// kc-Werte pro Bereich-Kategorie (FAO-56-Daumenwerte, Wachstumsperiode)
+var ZONE_KC_BY_CATEGORY = {
+  beet:             0.80,
+  hochbeet:         1.00,
+  rabatte:          0.80,
+  rasen:            0.85,
+  obstbaum_einzeln: 0.90,
+  beerenbeet:       0.90,
+  spalier:          0.85,
+  gewaechshaus:     0.95,
+  kuebel:           1.10,
+  hecke:            0.70
+};
+
+// Defizit-Schwellen pro Bereich-Kategorie (gelb = empfohlen, rot = dringend)
+var ZONE_DEFICIT_THRESHOLDS = {
+  beet:             {yellow: -8,  red: -15},
+  hochbeet:         {yellow: -5,  red: -10},
+  rabatte:          {yellow: -8,  red: -15},
+  rasen:            {yellow: -10, red: -20},
+  obstbaum_einzeln: {yellow: -15, red: -30},
+  beerenbeet:       {yellow: -10, red: -20},
+  spalier:          {yellow: -10, red: -20},
+  gewaechshaus:     {yellow: -5,  red: -10},
+  kuebel:           {yellow: -3,  red: -7},
+  hecke:            {yellow: -12, red: -25}
+};
+
+// Default-Schwelle wenn Kategorie unbekannt/leer
+var ZONE_DEFICIT_DEFAULT = {yellow: -8, red: -15};
+var ZONE_KC_DEFAULT = 0.80;
+
+// Rechnet die Wasserbilanz fuer einen Bereich.
+// Fenster: 7 Tage rueckwaerts + 2 Tage Forecast = 9 Tage.
+// Liefert: {balance, projected, severity, kc, threshold}
+//   balance:   Saldo (mm) ueber die 9 Tage
+//   projected: Saldo nach naechstem Plan-Lauf in den naechsten 2 Tagen (falls vorhanden)
+//   severity:  '' | 'yellow' | 'red' nach Schwellen
+//   kc:        verwendeter Pflanzenkoeffizient
+//   threshold: verwendete Schwellen
+// Liefert null wenn Bereich keinen Kreislauf hat oder Kreislauf inaktiv ist
+// (Bilanz nur fuer geplant bewaesserte Bereiche relevant).
+function zoneWaterBalance(zone, info) {
+  if (!zone || !zone.irrigationCircuit) return null;
+  var circuit = (CIRCUITS || []).find(function(c){return c.id === zone.irrigationCircuit;});
+  if (!circuit) return null;
+  if (circuit.active === 'false' || circuit.active === false) return null;
+  if (!info || !info.et0ByDate) return null;
+
+  var kc = ZONE_KC_BY_CATEGORY[zone.category] || ZONE_KC_DEFAULT;
+  var threshold = ZONE_DEFICIT_THRESHOLDS[zone.category] || ZONE_DEFICIT_DEFAULT;
+  var planDays = parseDays(circuit.days);
+  var planMm = circuitExpectedMm(circuit);
+
+  // 7 Tage rueckwaerts (gestern bis vor 7 Tagen) durch das Konto laufen lassen
+  var balance = 0;
+  for (var d = 7; d >= 1; d--) {
+    var date = new Date(Date.now() - d * 86400000);
+    var iso = toIsoDate(dayStart(date));
+    var dayKey = weekdayKey(date);
+    var rain = info.forecastByDate[iso] || 0;
+    var et0 = info.et0ByDate[iso] || 0;
+
+    // Verdunstung
+    balance -= et0 * kc;
+    // Regen
+    balance += rain;
+    // Plan-Wassergabe (nur wenn Plan-Tag UND nicht Variante-C-Skip)
+    if (planDays[dayKey] && planMm > 0) {
+      // Variante C: wenn Regen >= Plan-Wassergabe an diesem Tag, dann ausgesetzt
+      if (rain < planMm) {
+        balance += planMm;
+      }
+      // sonst: Regen ist schon dazu addiert, Plan-Wassergabe entfaellt (kein Doppel)
+    } else if (planDays[dayKey] && planMm <= 0) {
+      // Plan-Tag ohne bekannte Wassergabe: konservativ mit 5 mm rechnen
+      balance += 5;
+    }
+  }
+
+  // HEUTE: Plan-Wassergabe nur falls Plan-Tag (ET₀ und Regen sind heute zwar relevant,
+  // aber wir rechnen "wo stehe ich morgen frueh?" - heute ET₀/Regen mit reinnehmen)
+  var todayIso = toIsoDate(dayStart(new Date()));
+  var todayKey = weekdayKey(new Date());
+  var todayRain = info.forecastByDate[todayIso] || 0;
+  var todayEt0 = info.et0ByDate[todayIso] || 0;
+  balance -= todayEt0 * kc;
+  balance += todayRain;
+  // Heute-Plan: nur wenn der Plan-Lauf heute schon durch ist oder noch laeuft, sonst zaehlen
+  // wir ihn als "projected" weiter unten
+  var todayStatus = circuitTodayStatus(circuit);
+  if (todayStatus.alreadyRan || todayStatus.runningNow) {
+    if (planMm > 0) {
+      if (todayRain < planMm) balance += planMm;
+    } else {
+      balance += 5;
+    }
+  }
+
+  // Projected: Saldo + naechster Plan-Lauf in den naechsten 2 Tagen (heute spaeter, morgen, uebermorgen)
+  var projected = balance;
+  // Heute spaeter (noch nicht durch)
+  if (todayStatus.plannedToday && !todayStatus.alreadyRan && !todayStatus.runningNow) {
+    if (planMm > 0) {
+      if (todayRain < planMm) projected += planMm;
+    } else {
+      projected += 5;
+    }
+  }
+  // Naechste 2 Tage Forecast: ET₀ und Regen einrechnen, Plan-Wassergabe falls Plan-Tag
+  for (var f = 1; f <= 2; f++) {
+    var fdate = new Date(Date.now() + f * 86400000);
+    var fIso = toIsoDate(dayStart(fdate));
+    var fKey = weekdayKey(fdate);
+    var fRain = info.forecastByDate[fIso] || 0;
+    var fEt0 = info.et0ByDate[fIso] || 0;
+    projected -= fEt0 * kc;
+    projected += fRain;
+    if (planDays[fKey]) {
+      if (planMm > 0) {
+        if (fRain < planMm) projected += planMm;
+      } else {
+        projected += 5;
+      }
+    }
+  }
+
+  // Schwere-Stufe: 'projected' entscheidet (falls Plan-Lauf in den naechsten 2 Tagen den
+  // Defizit auffaengt, kein Hinweis)
+  var severity = '';
+  if (projected < threshold.red) severity = 'red';
+  else if (projected < threshold.yellow) severity = 'yellow';
+
+  return {
+    balance: Math.round(balance * 10) / 10,
+    projected: Math.round(projected * 10) / 10,
+    severity: severity,
+    kc: kc,
+    threshold: threshold
+  };
+}
+
+// Sammelt alle Bereiche mit Defizit, sortiert nach Schwere
+// (rot zuerst, dann gelb), innerhalb gleichem Status alphabetisch
+function collectDeficitZones(info) {
+  if (!ZONES || !ZONES.length) return [];
+  var hits = [];
+  ZONES.forEach(function(z) {
+    if (z.active === 'false') return;
+    var bal = zoneWaterBalance(z, info);
+    if (bal && bal.severity) {
+      hits.push({zone: z, balance: bal});
+    }
+  });
+  hits.sort(function(a, b) {
+    var ra = a.balance.severity === 'red' ? 0 : 1;
+    var rb = b.balance.severity === 'red' ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+    return (a.zone.name || '').localeCompare(b.zone.name || '', 'de');
+  });
+  return hits;
+}
+
 function renderWeatherBanner() {
   var banner = document.getElementById('op-weather-banner');
   if (!banner) return;
@@ -6064,7 +6259,10 @@ function renderWeatherBanner() {
     return;
   }
   var info = analyzeWeather(WEATHER_DATA);
-  if (!info.hasContent) {
+  // Wasserbilanz vorab pruefen, da auch ohne sonstige Wetter-Inhalte ein Defizit
+  // das Banner einblenden soll
+  var deficitsCheck = collectDeficitZones(info);
+  if (!info.hasContent && deficitsCheck.length === 0) {
     banner.style.display = 'none';
     return;
   }
@@ -6117,6 +6315,19 @@ function renderWeatherBanner() {
     }
     lines.push('<div class="weather-banner-line"><strong>Morgen früh: '+esc(ids)+'</strong> — '+verb+' am Steuergerät. <span class="muted">('+esc(detail)+')</span></div>');
   }
+  // Wasserbilanz-Defizit (Phase O9): Bereiche, die zusaetzliches Giessen brauchen
+  // (Liste wurde oben fuer hasContent-Check schon ermittelt, hier wiederverwenden)
+  var deficits = deficitsCheck;
+  if (deficits.length > 0) {
+    var redCount = 0;
+    var names = deficits.map(function(d){
+      if (d.balance.severity === 'red') redCount++;
+      return d.zone.name;
+    }).join(', ');
+    var verbDef = redCount > 0 ? 'Dringend zusätzlich gießen' : 'Zusätzlich gießen empfohlen';
+    var icon = redCount > 0 ? '⚠' : '💧';
+    lines.push('<div class="weather-banner-line"><strong>'+icon+' '+verbDef+':</strong> '+esc(names)+' <span class="muted">(Bilanz-Defizit trotz Plan)</span></div>');
+  }
   // Bodentemperatur (nur wenn kalt)
   if (info.soilTempNow !== null && info.soilTempNow < WEATHER_SOIL_COLD_C) {
     lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+' — zu kalt für Tomaten/Gurken.</div>');
@@ -6124,11 +6335,13 @@ function renderWeatherBanner() {
     lines.push('<div class="weather-banner-line muted">Boden 6 cm: '+fmtTemp(info.soilTempNow)+'.</div>');
   }
 
-  // Banner-Stil: danger bei Frost, warn bei Hitze oder hartem Bewaesserungs-Konflikt, sonst neutral
+  // Banner-Stil: danger bei Frost, warn bei Hitze oder hartem Bewaesserungs-Konflikt oder rotem Defizit, sonst neutral
   var cls = 'weather-banner';
   var icon = '🌦️';
+  var hasRedDeficit = deficits.some(function(d){return d.balance.severity === 'red';});
   if (info.frostDays.length > 0) { cls += ' danger'; icon = '❄️'; }
   else if (info.heatDays.length > 0) { cls += ' warn'; icon = '☀️'; }
+  else if (hasRedDeficit) { cls += ' warn'; icon = '⚠️'; }
   else if (conflict.severity === 'hard') { cls += ' warn'; icon = '💧'; }
   else if (info.pastRainMm >= WEATHER_RAIN_ENOUGH_MM) { icon = '🌧️'; }
 
