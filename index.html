@@ -120,6 +120,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
    den Restplatz schrumpfen und intern scrollen. */
 @media (max-width: 700px) {
   .nav { padding: 0 0.75rem; gap: 0.5rem; }
+  .nav-logo-text { display: none; } /* mobile: nur Blatt-Icon, Schriftzug frisst Platz */
+  .nav-logo-leaf { font-size: 22px; } /* dafuer Icon etwas groesser fuer Erkennbarkeit */
   .nav-tab { padding: 6px 12px; font-size: 13px; }
   .nav-tabs {
     gap: 0;
@@ -1255,7 +1257,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
-  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span> Pflanzenkompendium</div>
+  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span><span class="nav-logo-text"> Pflanzenkompendium</span></div>
   <div class="mode-switch" role="tablist" aria-label="Modus">
     <button class="mode-btn on" id="mode-indoor" onclick="setMode('indoor')" role="tab" aria-selected="true">
       <span class="mode-btn-icon">🏠</span><span class="mode-btn-label">Indoor</span>
