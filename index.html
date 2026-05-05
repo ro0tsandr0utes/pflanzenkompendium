@@ -568,6 +568,54 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   margin-left: 4px;
 }
 
+/* Pflanzen-Liste im Bereichs-Detail (Phase 5k) */
+.zone-plant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zone-plant-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.zone-plant-row:hover {
+  border-color: var(--g3);
+  background: var(--gl);
+}
+.zone-plant-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+.zone-plant-body {
+  flex: 1;
+  min-width: 0;
+}
+.zone-plant-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.zone-plant-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.zone-plant-arrow {
+  color: var(--muted);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
 /* Wetter-Banner (Phase O5) */
 .weather-banner {
   background: white;
@@ -1073,10 +1121,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <button class="setup-close" onclick="closeZoneDetailModal()" title="Schließen">×</button>
     <div class="detail-tabs">
       <button class="detail-tab on" id="zone-detail-tab-info" onclick="showZoneDetailTab('info')">Details</button>
+      <button class="detail-tab" id="zone-detail-tab-plants" onclick="showZoneDetailTab('plants')">Pflanzen</button>
       <button class="detail-tab" id="zone-detail-tab-care" onclick="showZoneDetailTab('care')">Pflegeplan</button>
     </div>
     <div class="detail-body">
       <div id="zone-detail-panel-info"></div>
+      <div id="zone-detail-panel-plants" style="display:none"></div>
       <div id="zone-detail-panel-care" style="display:none"></div>
     </div>
   </div>
@@ -1486,6 +1536,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <input class="search" id="op-srch" placeholder="Pflanze suchen…" oninput="renderOutdoorGrid()" />
       <select class="fsel" id="op-fzone" onchange="renderOutdoorGrid()"><option value="">Alle Bereiche</option></select>
       <select class="fsel" id="op-fcat" onchange="renderOutdoorGrid()"><option value="">Alle Kategorien</option></select>
+      <button class="btn" id="op-event-toggle" onclick="toggleOutdoorEventFilter()" style="display:none">Mit Events</button>
       <button class="btn primary" onclick="openOutdoorAddForm()">+ Pflanze</button>
     </div>
 
@@ -5437,10 +5488,13 @@ function openZoneDetailModal(id) {
   zoneDetailId = id;
   // Reset auf Info-Tab
   document.getElementById('zone-detail-tab-info').classList.add('on');
+  document.getElementById('zone-detail-tab-plants').classList.remove('on');
   document.getElementById('zone-detail-tab-care').classList.remove('on');
   document.getElementById('zone-detail-panel-info').style.display = '';
+  document.getElementById('zone-detail-panel-plants').style.display = 'none';
   document.getElementById('zone-detail-panel-care').style.display = 'none';
   renderZoneDetailInfo(z);
+  renderZoneDetailPlants(z);
   renderZoneDetailCare(z);
   document.getElementById('zone-detail-overlay').classList.remove('hidden');
 }
@@ -5451,7 +5505,7 @@ function closeZoneDetailModal() {
 }
 
 function showZoneDetailTab(tab) {
-  ['info','care'].forEach(function(t) {
+  ['info','plants','care'].forEach(function(t) {
     document.getElementById('zone-detail-tab-' + t).classList.toggle('on', t === tab);
     document.getElementById('zone-detail-panel-' + t).style.display = t === tab ? '' : 'none';
   });
@@ -5508,6 +5562,92 @@ function openZoneEditFromDetail() {
   var id = zoneDetailId;
   closeZoneDetailModal();
   openZoneForm(id);
+}
+
+// Pflanzen-Tab im Bereichs-Detail (Phase 5k):
+// Liste aller Pflanzen, die in diesem Bereich gepflanzt sind, plus eine
+// Aggregat-Kopfzeile (Anzahl, aktive Events, frostempfindliche, invasive).
+function renderZoneDetailPlants(z) {
+  var box = document.getElementById('zone-detail-panel-plants');
+  if (!box) return;
+  var plantsInZone = outdoorPlants.filter(function(p){ return p.zoneId === z.id; });
+
+  if (plantsInZone.length === 0) {
+    box.innerHTML =
+      '<div class="empty" style="padding:2rem 1rem">'+
+        '<div style="margin-bottom:0.5rem">Noch keine Pflanzen in diesem Bereich.</div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+
+          'Pflanzen mit dem Bereich "'+esc(z.name)+'" verknuepfen, um sie hier zu sehen.'+
+        '</div>'+
+      '</div>';
+    return;
+  }
+
+  // Aggregate
+  var nTotal = plantsInZone.length;
+  var nActive = 0, nFrostSensitive = 0, nInvasive = 0;
+  plantsInZone.forEach(function(p){
+    var evs = parseEvents(p.seasonalEvents);
+    if (evs.some(isEventActive)) nActive++;
+    if (p.hardy === 'nein' || p.hardy === 'bedingt') nFrostSensitive++;
+    if (p.invasive === 'ja') nInvasive++;
+  });
+
+  var summaryParts = [nTotal === 1 ? '1 Pflanze' : (nTotal + ' Pflanzen')];
+  if (nActive > 0) summaryParts.push('<strong style="color:var(--g2)">'+nActive+' mit aktiven Events</strong>');
+  if (nFrostSensitive > 0) summaryParts.push(nFrostSensitive + ' frostempfindlich');
+  if (nInvasive > 0) summaryParts.push(nInvasive + ' invasiv');
+
+  var summaryHtml =
+    '<div style="background:var(--gl);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6;color:var(--text)">'+
+      summaryParts.join(' &middot; ')+
+    '</div>';
+
+  // Sortierung: Pflanzen mit aktiven Events zuerst, dann alphabetisch
+  plantsInZone.sort(function(a, b){
+    var aActive = parseEvents(a.seasonalEvents).some(isEventActive) ? 1 : 0;
+    var bActive = parseEvents(b.seasonalEvents).some(isEventActive) ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    return (a.name || '').localeCompare(b.name || '', 'de');
+  });
+
+  var rows = plantsInZone.map(function(p){
+    var icon = OUTDOOR_CAT_ICONS[p.category] || '🌱';
+    var n = parseInt(p.count, 10);
+    var countLabel = (n && n > 1) ? ' <span style="color:var(--muted);font-size:12px">&times;' + n + '</span>' : '';
+    var pills = '';
+    var evs = parseEvents(p.seasonalEvents);
+    if (evs.some(isEventActive)) {
+      pills += '<span class="op-card-warn-pill" style="background:var(--gl);color:var(--g2);border-color:var(--g3)">🍂 aktives Event</span>';
+    }
+    if (p.hardy === 'nein') {
+      pills += '<span class="op-card-warn-pill frost">❄️ frostempfindlich</span>';
+    } else if (p.hardy === 'bedingt') {
+      pills += '<span class="op-card-warn-pill frost">❄️ bedingt frosthart</span>';
+    }
+    if (p.invasive === 'ja') {
+      pills += '<span class="op-card-warn-pill invasive">⚠️ invasiv</span>';
+    }
+    return '<div class="zone-plant-row" onclick="openOutdoorFromZoneDetail(\''+esc(p.id)+'\')">'+
+      '<div class="zone-plant-icon">'+icon+'</div>'+
+      '<div class="zone-plant-body">'+
+        '<div class="zone-plant-name">'+esc(p.name)+countLabel+'</div>'+
+        (pills ? '<div class="zone-plant-pills">'+pills+'</div>' : '')+
+      '</div>'+
+      '<div class="zone-plant-arrow">›</div>'+
+    '</div>';
+  }).join('');
+
+  box.innerHTML = summaryHtml + '<div class="zone-plant-list">' + rows + '</div>';
+}
+
+// Klick auf Pflanze im Bereichs-Detail: Bereichs-Modal schliessen, Pflanze oeffnen.
+// Dadurch laesst sich nach dem Schliessen der Pflanzen-Detail-Ansicht der Bereichs-Tab
+// nicht direkt wiederherstellen - akzeptabel, da der Workflow "Bereich -> Pflanze"
+// klar in eine Richtung geht.
+function openOutdoorFromZoneDetail(plantId) {
+  closeZoneDetailModal();
+  openOutdoorDetailModal(plantId);
 }
 
 function renderZoneDetailCare(z) {
@@ -6049,6 +6189,7 @@ function seedOutdoorPlantsUi() {
 var outdoorPlants = [];
 var outdoorEditId = null;
 var outdoorPlantsLoaded = false;
+var outdoorEventFilterOn = false; // Phase 5k: Filter "Nur Pflanzen mit aktiven Events"
 
 var OUTDOOR_CAT_ICONS = {
   staude: '🌿',
@@ -7072,6 +7213,17 @@ function renderOutdoorGrid() {
   var fzone = document.getElementById('op-fzone').value;
   var fcat = document.getElementById('op-fcat').value;
 
+  // Phase 5k: Toggle "Mit Events" - sichtbar wenn ueberhaupt Pflanzen mit aktiven Events da sind
+  var anyActive = outdoorPlants.some(function(p){
+    return parseEvents(p.seasonalEvents).some(isEventActive);
+  });
+  var toggle = document.getElementById('op-event-toggle');
+  if (toggle) {
+    toggle.style.display = anyActive ? '' : 'none';
+    toggle.textContent = outdoorEventFilterOn ? 'Mit Events ✓' : 'Mit Events';
+    toggle.classList.toggle('on', outdoorEventFilterOn);
+  }
+
   var visible = outdoorPlants.filter(function(p) {
     if (srch) {
       var hay = (p.name + ' ' + (p.notes || '') + ' ' + (p.companions || '')).toLowerCase();
@@ -7079,6 +7231,10 @@ function renderOutdoorGrid() {
     }
     if (fzone && p.zoneId !== fzone) return false;
     if (fcat && p.category !== fcat) return false;
+    if (outdoorEventFilterOn) {
+      var evs = parseEvents(p.seasonalEvents);
+      if (!evs.some(isEventActive)) return false;
+    }
     return true;
   });
 
@@ -7088,7 +7244,9 @@ function renderOutdoorGrid() {
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
-      grid.innerHTML = '<div class="care-placeholder">Keine Pflanzen passen zu den Filtern.</div>';
+      var msg = 'Keine Pflanzen passen zu den Filtern.';
+      if (outdoorEventFilterOn) msg = 'Keine Pflanzen mit aktiven Events.';
+      grid.innerHTML = '<div class="care-placeholder">'+msg+'</div>';
     }
     document.getElementById('nav-count').textContent = '';
     return;
@@ -7096,6 +7254,12 @@ function renderOutdoorGrid() {
   empty.style.display = 'none';
   grid.innerHTML = visible.map(function(p){return renderOutdoorCard(p);}).join('');
   document.getElementById('nav-count').textContent = visible.length + ' Pflanzen';
+}
+
+// Phase 5k: Toggle fuer "Nur Pflanzen mit aktiven Events" im Outdoor-Grid.
+function toggleOutdoorEventFilter() {
+  outdoorEventFilterOn = !outdoorEventFilterOn;
+  renderOutdoorGrid();
 }
 
 function renderOutdoorCard(p) {
