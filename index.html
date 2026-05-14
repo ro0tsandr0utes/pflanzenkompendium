@@ -2,20 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pflanzenkompendium</title>
-<!-- Homescreen / PWA-Vollbild (iOS + Android) -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Pflanzen">
-<meta name="theme-color" content="#F4F3EE">
-<!-- Icons (Phase 5j): Pfade relativ, funktioniert auf GitHub Pages und lokal -->
-<link rel="icon" type="image/svg+xml" href="./favicon.svg">
-<link rel="icon" type="image/png" sizes="96x96" href="./favicon-96x96.png">
-<link rel="shortcut icon" href="./favicon.ico">
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-<link rel="manifest" href="./site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -48,16 +36,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center;
   padding: 0 1.5rem; gap: 1rem;
-  /* iOS PWA / Notch-Sicherheit: Bar respektiert Safe-Area */
-  padding-top: env(safe-area-inset-top, 0);
-  height: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
 }
 .nav-logo {
   font-family: 'Playfair Display', serif;
   font-size: 16px; font-weight: 500;
   color: var(--g1); white-space: nowrap;
   display: flex; align-items: center; gap: 7px;
-  flex-shrink: 0;
 }
 .nav-logo-leaf { font-size: 18px; }
 .mode-switch {
@@ -79,67 +63,25 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   .mode-btn { padding: 5px 9px; font-size: 12px; }
   .mode-btn-label { display: none; }
 }
-.nav-tabs {
-  display: flex; gap: 2px;
-  /* WICHTIG: flex:1 statt margin:auto. Im Flex-Layout muss der Scroll-Container
-     selbst eine begrenzte Breite haben, damit overflow-x greift. margin:auto
-     liess das Element auf seine natuerliche Inhaltsbreite kollabieren oder
-     ueberlaufen, beides verhindert internes Scrollen. */
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
-  /* Tabs auf Desktop horizontal zentriert wirken lassen, ohne margin:auto */
-  justify-content: center;
-}
-.nav-tabs::-webkit-scrollbar { display: none; } /* Safari/Chrome */
+.nav-tabs { display: flex; gap: 2px; margin: 0 auto; }
 .nav-tab {
   padding: 7px 18px; border: none; background: none;
   font-family: 'DM Sans', sans-serif; font-size: 14px;
   color: var(--muted); cursor: pointer; border-radius: 20px;
   transition: all .15s;
-  flex-shrink: 0; /* Tabs nicht zusammenquetschen, lieber scrollen */
-  white-space: nowrap;
 }
 .nav-tab.on  { background: var(--gl); color: var(--g2); font-weight: 500; }
 .nav-tab:hover:not(.on) { background: var(--bg); color: var(--text); }
-.nav-count { font-size: 13px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.nav-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .nav-btn {
   width: 36px; height: 36px; border-radius: 50%;
   border: 1px solid var(--border); background: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; transition: background .15s; color: var(--muted);
-  flex-shrink: 0;
 }
 .nav-btn:hover { background: var(--bg); color: var(--text); }
 
-/* Mobile: schmaleres Padding an der Bar, kleinere Tabs, weniger Gap.
-   Mode-Switch behaelt fixe Breite (flex-shrink:0 oben), Tabs duerfen auf
-   den Restplatz schrumpfen und intern scrollen. */
-@media (max-width: 700px) {
-  .nav { padding: 0 0.75rem; gap: 0.5rem; }
-  .nav-logo-text { display: none; } /* mobile: nur Blatt-Icon, Schriftzug frisst Platz */
-  .nav-logo-leaf { font-size: 22px; } /* dafuer Icon etwas groesser fuer Erkennbarkeit */
-  .nav-tab { padding: 6px 12px; font-size: 13px; }
-  .nav-tabs {
-    gap: 0;
-    /* WICHTIG: auf Mobile NICHT zentrieren, sonst wird der erste Tab links
-       weggescrollt und ist nicht erreichbar. Linksbuendig + Padding-right
-       als visueller Hinweis dass es weitergeht. */
-    justify-content: flex-start;
-    padding-right: 4px;
-  }
-  .nav-count { display: none; } /* mobile: Banner zeigt das eh */
-}
-
-.main {
-  max-width: 1080px; margin: 0 auto;
-  padding: calc(var(--nav-h) + env(safe-area-inset-top, 0px) + 2rem) 1.5rem 3rem;
-  /* iOS PWA: untere Safe-Area für Home-Indicator */
-  padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
-}
+.main { max-width: 1080px; margin: 0 auto; padding: calc(var(--nav-h) + 2rem) 1.5rem 3rem; }
 .panel { display: none; }
 .panel.on { display: block; }
 
@@ -568,54 +510,6 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
   margin-left: 4px;
 }
 
-/* Pflanzen-Liste im Bereichs-Detail (Phase 5k) */
-.zone-plant-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.zone-plant-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  cursor: pointer;
-  transition: border-color .15s, background .15s;
-}
-.zone-plant-row:hover {
-  border-color: var(--g3);
-  background: var(--gl);
-}
-.zone-plant-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-  width: 28px;
-  text-align: center;
-}
-.zone-plant-body {
-  flex: 1;
-  min-width: 0;
-}
-.zone-plant-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.zone-plant-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.zone-plant-arrow {
-  color: var(--muted);
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
 /* Wetter-Banner (Phase O5) */
 .weather-banner {
   background: white;
@@ -853,6 +747,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .care-banner-icon { font-size: 22px; flex-shrink: 0; }
 .care-banner-text { flex: 1; }
 .care-banner-text strong { font-weight: 500; }
+.care-plant-link { font-weight: 600; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color .15s; }
+.care-plant-link:hover { text-decoration-color: currentColor; }
 
 .care-events-fold {
   margin-top: 4px;
@@ -1121,12 +1017,10 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <button class="setup-close" onclick="closeZoneDetailModal()" title="Schließen">×</button>
     <div class="detail-tabs">
       <button class="detail-tab on" id="zone-detail-tab-info" onclick="showZoneDetailTab('info')">Details</button>
-      <button class="detail-tab" id="zone-detail-tab-plants" onclick="showZoneDetailTab('plants')">Pflanzen</button>
       <button class="detail-tab" id="zone-detail-tab-care" onclick="showZoneDetailTab('care')">Pflegeplan</button>
     </div>
     <div class="detail-body">
       <div id="zone-detail-panel-info"></div>
-      <div id="zone-detail-panel-plants" style="display:none"></div>
       <div id="zone-detail-panel-care" style="display:none"></div>
     </div>
   </div>
@@ -1307,7 +1201,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
-  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span><span class="nav-logo-text"> Pflanzenkompendium</span></div>
+  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span> Pflanzenkompendium</div>
   <div class="mode-switch" role="tablist" aria-label="Modus">
     <button class="mode-btn on" id="mode-indoor" onclick="setMode('indoor')" role="tab" aria-selected="true">
       <span class="mode-btn-icon">🏠</span><span class="mode-btn-label">Indoor</span>
@@ -1503,12 +1397,6 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <input class="form-input" id="ff-desc" placeholder="NPK-Werte, Dosierung, Eigenschaften…" />
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Dosierungs-Hinweis</label>
-          <input class="form-input" id="ff-dosing" placeholder="z.B. 5 ml auf 1 L Wasser" />
-        </div>
-      </div>
       <div class="form-row" style="margin-bottom:.5rem">
         <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
           <input type="checkbox" id="ff-leer" style="width:16px;height:16px" />
@@ -1536,7 +1424,6 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <input class="search" id="op-srch" placeholder="Pflanze suchen…" oninput="renderOutdoorGrid()" />
       <select class="fsel" id="op-fzone" onchange="renderOutdoorGrid()"><option value="">Alle Bereiche</option></select>
       <select class="fsel" id="op-fcat" onchange="renderOutdoorGrid()"><option value="">Alle Kategorien</option></select>
-      <button class="btn" id="op-event-toggle" onclick="toggleOutdoorEventFilter()" style="display:none">Mit Events</button>
       <button class="btn primary" onclick="openOutdoorAddForm()">+ Pflanze</button>
     </div>
 
@@ -2232,8 +2119,7 @@ function countDue() {
   plants.forEach(function(p) {
     var w = dueStatus(p, 'water');
     var f = dueStatus(p, 'fertilize');
-    var fertActive = fertButtonVisible(p);
-    if (w.due || (f.due && fertActive)) n++;
+    if (w.due || f.due) n++;
   });
   return n;
 }
@@ -2283,7 +2169,7 @@ function renderEventsBlock(events) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
-        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+recPill+
+        '<a class="care-plant-link" onclick="openDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+recPill+
       '</div>'+
       '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
     '</div>';
@@ -2417,14 +2303,11 @@ function renderDueBadges(p) {
   var w = dueStatus(p, 'water');
   var f = dueStatus(p, 'fertilize');
   var fertBadge = renderFertBadge(p);
-  // Phase 5h: in der Ruhephase keine "Duengen faellig"-Badges anzeigen
-  var fertVisible = fertButtonVisible(p);
   if (!w.tracked && !f.tracked && !fertBadge) return '';
   var html = '<div class="due-badges">';
   ['water','fertilize'].forEach(function(t) {
     var s = t==='water' ? w : f;
     if (!s.tracked) return;
-    if (t === 'fertilize' && !fertVisible) return; // in Ruhephase oder ohne Intervall: kein Badge
     var icon = t==='water' ? '💧' : '🌱';
     var label;
     var cls;
@@ -2445,25 +2328,13 @@ function renderDueBadges(p) {
   return html;
 }
 
-// Phase 5h: Duengen-Button und Faelligkeits-Anzeige sind nur sinnvoll wenn die
-// Pflanze aktuell in der Wachstumsphase ist. In der Ruhephase wuerde "Duengen
-// faellig" im Winter visuell rauschen, ohne dass eine Aktion gewuenscht ist.
-// Pflanzen ohne gesetzte Wachstumsmonate gelten als ganzjaehrig wachsend (Default
-// von currentDosePhase = 'growth') -> Verhalten unveraendert.
-function fertButtonVisible(p) {
-  var w = parseInt(p.fertilizingIntervalWeeks);
-  if (!w || w <= 0) return false;
-  return currentDosePhase(p) === 'growth';
-}
-
 function renderQuickActions(p) {
   var w = dueStatus(p, 'water');
   var f = dueStatus(p, 'fertilize');
-  var showFert = f.due && fertButtonVisible(p);
-  if (!w.due && !showFert) return '';
+  if (!w.due && !f.due) return '';
   var html = '<div class="quick-actions">';
   if (w.due) html += '<button class="quick-btn" onclick="markCare(\''+p.id+'\',\'water\')">💧 Gegossen</button>';
-  if (showFert) html += '<button class="quick-btn fert" onclick="markCare(\''+p.id+'\',\'fertilize\')">🌱 Gedüngt</button>';
+  if (f.due) html += '<button class="quick-btn fert" onclick="markCare(\''+p.id+'\',\'fertilize\')">🌱 Gedüngt</button>';
   html += '</div>';
   return html;
 }
@@ -2543,123 +2414,12 @@ function markCare(id, type) {
     var label = type==='water' ? 'Gegossen' : 'Gedüngt';
     var snapped = daysBetween(snap, dayStart(new Date())) !== 0;
     toast(label + (snapped ? ' (auf '+fmtDate(snap)+' gerundet)' : ''));
-    // Pflegelog-Eintrag fire-and-forget. Bei Duengen Snapshot der aktuellen
-    // Dosis und Duenger-ID mitschreiben. Fehler still verschlucken - Hauptdaten
-    // sind schon gespeichert, der Log ist sekundaer.
-    writeCareLog(p, type==='water' ? 'water' : 'fertilize', iso);
-    // Cache invalidieren und ggf. nachladen, falls Detail-Modal offen ist
-    delete careLogCache[id];
-    if (detailPlantId === id) loadCareLogForDetail(id, true);
     renderBanner();
     renderGrid();
   }).catch(function(){
     p[field] = prev;
     toast('Verbindungsfehler');
   });
-}
-
-// Schreibt einen Pflegelog-Eintrag. fire-and-forget, Fehler werden ignoriert.
-// Bei action='fertilize' wird die aktuelle Dosis und fertilizerId als Snapshot mitgeschrieben.
-// 'action' ist der doGet-Routing-Parameter, deshalb wird der Log-Action-Typ als
-// 'logAction' uebertragen (siehe Apps-Script addLog).
-function writeCareLog(p, action, dateIso) {
-  if (!p || !action || !dateIso) return;
-  var payload = {
-    action: 'addLog',
-    plantId: p.id,
-    logAction: action,
-    date: dateIso
-  };
-  if (action === 'fertilize') {
-    payload.fertilizerId = p.fertilizerId || '';
-    payload.dose = currentDoseLabel(p) || '';
-  }
-  apiFetch(payload).catch(function(){ /* still */ });
-}
-
-// === Pflegelog-Anzeige (Phase 5h) ===
-// Cache pro Pflanzen-ID. Wird beim Modal-Oeffnen einmal geholt und ist gut genug:
-// nach einem Quick-Action-Klick wird der Cache invalidiert und neu geladen.
-var careLogCache = {};
-
-// Rendert nur den Container fuer den Pflegelog-Aufklapper. Inhalt wird asynchron
-// gefuellt, sobald loadCareLogForDetail() die Daten geholt hat.
-function renderCareLogFold(plantId) {
-  return '<div id="care-log-fold-'+esc(plantId)+'" class="care-log-fold-wrap"></div>';
-}
-
-// Holt die letzten 5 Log-Eintraege fuer eine Pflanze und rendert den Aufklapper.
-// Wenn force=true, wird der Cache umgangen.
-function loadCareLogForDetail(plantId, force) {
-  if (!plantId) return;
-  if (!cfg.url) return; // ohne URL kein Backend-Zugriff
-  if (!force && careLogCache[plantId]) {
-    paintCareLogFold(plantId, careLogCache[plantId]);
-    return;
-  }
-  var container = document.getElementById('care-log-fold-'+plantId);
-  if (container) {
-    container.innerHTML = '<details class="detail-fold"><summary>'+
-      '<span class="detail-fold-icon">📋</span>'+
-      '<span class="detail-fold-label">Pflegelog</span>'+
-      '<span class="detail-fold-meta">lädt…</span>'+
-      '</summary></details>';
-  }
-  apiFetch({action:'getLog', plantId:plantId, limit:5}).then(function(res){
-    if (res && res.ok && Array.isArray(res.data)) {
-      careLogCache[plantId] = res.data;
-      paintCareLogFold(plantId, res.data);
-    } else {
-      paintCareLogFold(plantId, []);
-    }
-  }).catch(function(){
-    paintCareLogFold(plantId, []);
-  });
-}
-
-function paintCareLogFold(plantId, entries) {
-  var container = document.getElementById('care-log-fold-'+plantId);
-  if (!container) return;
-  if (!entries || entries.length === 0) {
-    container.innerHTML = '<details class="detail-fold"><summary>'+
-      '<span class="detail-fold-icon">📋</span>'+
-      '<span class="detail-fold-label">Pflegelog</span>'+
-      '<span class="detail-fold-meta">leer</span>'+
-      '</summary>'+
-      '<div class="detail-fold-content" style="font-size:12px;color:var(--muted)">Noch keine Eintraege.</div>'+
-      '</details>';
-    return;
-  }
-  var rows = entries.map(function(e){
-    var icon = e.action === 'water' ? '💧' : (e.action === 'fertilize' ? '🌱' : '•');
-    var label = e.action === 'water' ? 'Gegossen' : (e.action === 'fertilize' ? 'Gedüngt' : esc(e.action));
-    var extra = '';
-    if (e.action === 'fertilize') {
-      var bits = [];
-      if (e.fertilizerId) {
-        var f = fertById(e.fertilizerId);
-        bits.push(f ? f.name : e.fertilizerId);
-      }
-      if (e.dose) {
-        var doseTxt = doseShortLabel(e.dose) || e.dose;
-        bits.push(doseTxt);
-      }
-      if (bits.length > 0) {
-        extra = '<span style="color:var(--muted);font-size:11px;margin-left:6px">('+esc(bits.join(', '))+')</span>';
-      }
-    }
-    return '<div class="detail-event-row">'+
-      '<span class="detail-event-date">'+esc(fmtDate(e.date))+'</span>'+
-      '<span class="detail-event-text">'+icon+' '+label+extra+'</span>'+
-    '</div>';
-  }).join('');
-  container.innerHTML = '<details class="detail-fold"><summary>'+
-    '<span class="detail-fold-icon">📋</span>'+
-    '<span class="detail-fold-label">Pflegelog</span>'+
-    '<span class="detail-fold-meta">letzte '+entries.length+'</span>'+
-    '</summary>'+
-    '<div class="detail-fold-content"><div class="detail-events-list">'+rows+'</div></div>'+
-    '</details>';
 }
 
 // Saisonales Event als erledigt markieren -> Datum + recurYears Jahre (Default 1)
@@ -3131,7 +2891,6 @@ function openFertForm() {
   document.getElementById('fert-form-title').textContent = 'Dünger hinzufügen';
   document.getElementById('ff-name').value = '';
   document.getElementById('ff-desc').value = '';
-  document.getElementById('ff-dosing').value = '';
   document.getElementById('ff-cat').value = 'green';
   document.getElementById('ff-usage').value = 'indoor';
   document.getElementById('ff-leer').checked = false;
@@ -3149,7 +2908,6 @@ function startEditFert(id) {
   document.getElementById('fert-form-title').textContent = 'Dünger bearbeiten ('+id+')';
   document.getElementById('ff-name').value = f.name || '';
   document.getElementById('ff-desc').value = f.desc || '';
-  document.getElementById('ff-dosing').value = f.dosing || '';
   document.getElementById('ff-cat').value = f.category || 'universal';
   document.getElementById('ff-usage').value = f.usage || 'indoor';
   document.getElementById('ff-leer').checked = !!f.leer;
@@ -3177,7 +2935,6 @@ function nextFertId() {
 function saveFertForm() {
   var name = document.getElementById('ff-name').value.trim();
   var desc = document.getElementById('ff-desc').value.trim();
-  var dosing = document.getElementById('ff-dosing').value.trim();
   var cat = document.getElementById('ff-cat').value;
   var usage = document.getElementById('ff-usage').value;
   var leer = document.getElementById('ff-leer').checked;
@@ -3189,16 +2946,16 @@ function saveFertForm() {
   document.getElementById('ff-err').textContent = '';
   apiFetch({
     action: isEdit ? 'updateFert' : 'addFert',
-    id: id, name: name, desc: desc, dosing: dosing, category: cat, usage: usage,
+    id: id, name: name, desc: desc, category: cat, usage: usage,
     leer: leer ? 'true' : 'false',
     active: active ? 'true' : 'false'
   }).then(function(res){
     if (res.ok) {
       if (isEdit) {
         var f = fertById(id);
-        if (f) { f.name=name; f.desc=desc; f.dosing=dosing; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
+        if (f) { f.name=name; f.desc=desc; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
       } else {
-        FERTS.push({id:id, name:name, desc:desc, dosing:dosing, category:cat, usage:usage, leer:leer, active:active});
+        FERTS.push({id:id, name:name, desc:desc, category:cat, usage:usage, leer:leer, active:active});
       }
       var wasNew = !isEdit;
       fertEditId = null;
@@ -3998,7 +3755,6 @@ function openDetailModal(id) {
   document.getElementById('detail-panel-info').style.display = '';
   document.getElementById('detail-panel-care').style.display = 'none';
   renderDetailModal();
-  loadCareLogForDetail(id, false); // Indoor
   document.getElementById('detail-overlay').classList.remove('hidden');
 }
 
@@ -4098,7 +3854,6 @@ function renderDetailInfo(p) {
     fertHtml+
     notesHtml+
     eventsHtml+
-    renderCareLogFold(p.id)+
     '<div class="detail-actions">'+
       '<button class="btn sm" onclick="openRepotModal(\''+p.id+'\')">🪴 Umtopfen</button>'+
       '<button class="btn sm" onclick="closeDetailModal();startEdit(\''+p.id+'\')">Bearbeiten</button>'+
@@ -4161,28 +3916,41 @@ function renderDetailCare(p) {
     meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am '+esc(dStr)+'</div>';
   }
 
-  // Dosis-Info: editierbare Box (siehe renderDoseBox unten)
-  var doseInfo = renderDoseBox(p, !!doseEditOverride);
+  // Dosis-Info: nur wenn Pflanze geduengt wird und Dosis-Felder gesetzt sind
+  var doseInfo = '';
+  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
+  if (fWeeks > 0 && (p.fertDoseGrowth || p.fertDoseDormant)) {
+    var phase = currentDosePhase(p);
+    var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
+    var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
+    var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
+    var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
+    var monthRange = '';
+    if (p.growthMonthStart && p.growthMonthEnd) {
+      var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      var s = parseInt(p.growthMonthStart), e = parseInt(p.growthMonthEnd);
+      if (s >= 1 && s <= 12 && e >= 1 && e <= 12) {
+        monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
+      }
+    }
+    var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
+    var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
+    doseInfo =
+      '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
+        '<div style="font-weight:500;color:var(--g1);margin-bottom:4px">Aktuelle Düngung'+esc(monthRange)+'</div>'+
+        '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
+        (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
+      '</div>';
+  }
 
   var folds = CARE_S.map(function(s){
     var text = obj[s.key] || '–';
-    var extra = '';
-    // Bei Duengen-Sektion: Dosierungs-Hinweis vom zugeordneten Duenger anhaengen
-    if (s.key === 'duengen' && p.fertilizerId) {
-      var f = fertById(p.fertilizerId);
-      if (f && f.dosing) {
-        extra = '<div style="margin-top:10px;padding:8px 12px;background:var(--gl);border-left:3px solid '+s.color+';border-radius:4px;font-size:12px;line-height:1.5">'+
-          '<span style="color:var(--muted)">Dosierung '+esc(f.name)+': </span>'+
-          '<strong style="color:var(--text)">'+esc(f.dosing)+'</strong>'+
-        '</div>';
-      }
-    }
     return '<details class="detail-fold">'+
       '<summary>'+
         '<span class="detail-fold-icon">'+s.icon+'</span>'+
         '<span class="detail-fold-label" style="color:'+s.color+'">'+s.label+'</span>'+
       '</summary>'+
-      '<div class="detail-fold-content">'+esc(text)+extra+'</div>'+
+      '<div class="detail-fold-content">'+esc(text)+'</div>'+
     '</details>';
   }).join('');
 
@@ -4190,196 +3958,6 @@ function renderDetailCare(p) {
     '<div class="detail-actions">'+
       '<button class="btn sm ghost" id="detail-refresh-btn" onclick="refreshCarePlanInModal()">↻ Neu generieren</button>'+
     '</div>';
-}
-
-// Rendert die Dosierungs-Info-Box (Lese- oder Edit-Modus).
-// Lese-Modus: kompakte Anzeige der aktuellen Phase mit Stift-Icon zum Editieren.
-// Edit-Modus: Selects fuer beide Dosen + Wachstumsmonate, mit Speichern/Abbrechen.
-function renderDoseBox(p, editing) {
-  var fWeeks = parseInt(p.fertilizingIntervalWeeks);
-  if (!fWeeks || fWeeks <= 0) return ''; // Pflanze wird nicht geduengt -> keine Box
-
-  var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-
-  if (editing) {
-    var doseOpts = [
-      {v:'',         label:'– nicht gesetzt –'},
-      {v:'voll',     label:'● voll'},
-      {v:'halb',     label:'◐ halbe Dosis'},
-      {v:'viertel',  label:'◔ Viertel-Dosis'},
-      {v:'aussetzen',label:'○ pausieren'}
-    ];
-    function doseSelect(id, current) {
-      return '<select id="'+id+'" class="form-select" style="width:100%;background:white">'+
-        doseOpts.map(function(o){
-          var sel = (current === o.v) ? ' selected' : '';
-          return '<option value="'+o.v+'"'+sel+'>'+esc(o.label)+'</option>';
-        }).join('')+
-      '</select>';
-    }
-    function monthSelect(id, current) {
-      var cur = parseInt(current);
-      var opts = '<option value="">–</option>';
-      for (var i = 1; i <= 12; i++) {
-        var sel = (cur === i) ? ' selected' : '';
-        opts += '<option value="'+i+'"'+sel+'>'+months[i-1]+'</option>';
-      }
-      return '<select id="'+id+'" class="form-select" style="width:100%;background:white">'+opts+'</select>';
-    }
-
-    return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:12px 14px;margin-bottom:1rem;font-size:13px">'+
-      '<div style="font-weight:500;color:var(--g1);margin-bottom:10px">Düngung bearbeiten</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstumsphase</div>'+
-          doseSelect('dose-growth', p.fertDoseGrowth || '')+
-        '</div>'+
-        '<div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ruhephase</div>'+
-          doseSelect('dose-dormant', p.fertDoseDormant || '')+
-        '</div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstum von</div>'+
-          monthSelect('dose-mstart', p.growthMonthStart)+
-        '</div>'+
-        '<div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Wachstum bis</div>'+
-          monthSelect('dose-mend', p.growthMonthEnd)+
-        '</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:8px;align-items:center">'+
-        '<button class="btn sm primary" onclick="saveDoseEdits()">Speichern</button>'+
-        '<button class="btn sm ghost" onclick="toggleDoseEdit(false)">Abbrechen</button>'+
-        '<span id="dose-edit-hint" style="font-size:12px;color:var(--muted)"></span>'+
-      '</div>'+
-    '</div>';
-  }
-
-  // Lesemodus
-  var hasAny = p.fertDoseGrowth || p.fertDoseDormant || p.growthMonthStart || p.growthMonthEnd;
-  if (!hasAny) {
-    // Kompakter Hinweis mit Editier-Knopf, wenn noch nichts gesetzt ist
-    return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
-      '<span style="color:var(--muted)">Keine Dosierung hinterlegt.</span>'+
-      '<button class="btn sm ghost" onclick="toggleDoseEdit(true)" style="font-size:12px">✎ Bearbeiten</button>'+
-    '</div>';
-  }
-
-  var phase = currentDosePhase(p);
-  var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
-  var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
-  var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
-  var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
-  var monthRange = '';
-  if (p.growthMonthStart && p.growthMonthEnd) {
-    var s = parseInt(p.growthMonthStart), e = parseInt(p.growthMonthEnd);
-    if (s >= 1 && s <= 12 && e >= 1 && e <= 12) {
-      monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
-    }
-  }
-  var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
-  var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
-
-  return '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'+
-      '<span style="font-weight:500;color:var(--g1)">Aktuelle Düngung'+esc(monthRange)+'</span>'+
-      '<button class="btn sm ghost" onclick="toggleDoseEdit(true)" title="Dosierung bearbeiten" style="font-size:11px;padding:2px 8px">✎</button>'+
-    '</div>'+
-    '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
-    (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
-  '</div>';
-}
-
-// Schaltet zwischen Lese- und Edit-Modus der Dosis-Box. Re-rendert nur den Pflegeplan-Tab.
-function toggleDoseEdit(editing) {
-  if (!detailPlantId) return;
-  var p = plants.find(function(x){return x.id===detailPlantId;});
-  if (!p) return;
-  // renderDetailCare neu aufrufen, aber doseInfo-Render-Modus durch Flag steuern
-  var box = document.getElementById('detail-panel-care');
-  if (!box) return;
-  // Zustand merken: wir muessten renderDetailCare anpassen, oder einfacher: nur die Box ersetzen.
-  // Statt komplettem Re-Render: nur die erste Dosis-Box im Panel austauschen.
-  var newBoxHtml = renderDoseBox(p, editing);
-  // Suche das erste Element im box, das die alte Dosis-Box ist (anhand des Texts).
-  // Pragmatischer: komplettes Re-Render des Pflegeplan-Panels mit Override-Flag.
-  doseEditOverride = editing;
-  renderDetailCare(p);
-  doseEditOverride = false;
-}
-
-// Override-Flag fuer renderDetailCare: wenn true, wird Dosis-Box im Edit-Modus gerendert.
-var doseEditOverride = false;
-
-// Speichert die im Edit-Modus eingegebenen Dosis-Werte.
-function saveDoseEdits() {
-  if (!detailPlantId) return;
-  var p = plants.find(function(x){return x.id===detailPlantId;});
-  if (!p) return;
-  var hint = document.getElementById('dose-edit-hint');
-  var validDoses = ['','voll','halb','viertel','aussetzen'];
-  var growth = document.getElementById('dose-growth').value;
-  var dormant = document.getElementById('dose-dormant').value;
-  var mStart = document.getElementById('dose-mstart').value;
-  var mEnd = document.getElementById('dose-mend').value;
-  if (validDoses.indexOf(growth) < 0) { if (hint) hint.textContent = 'Ungueltige Wachstums-Dosis'; return; }
-  if (validDoses.indexOf(dormant) < 0) { if (hint) hint.textContent = 'Ungueltige Ruhe-Dosis'; return; }
-  // Monate: leer ist ok, sonst 1..12
-  function validMonth(m) {
-    if (m === '' || m === null) return true;
-    var n = parseInt(m);
-    return !isNaN(n) && n >= 1 && n <= 12;
-  }
-  if (!validMonth(mStart) || !validMonth(mEnd)) { if (hint) hint.textContent = 'Ungueltiger Monat'; return; }
-  // Beide Monate gesetzt oder beide leer (Konsistenz)
-  if ((mStart === '' && mEnd !== '') || (mStart !== '' && mEnd === '')) {
-    if (hint) hint.textContent = 'Beide Monate setzen oder beide leer'; return;
-  }
-
-  // Vorherige Werte fuer Rollback
-  var prev = {
-    fertDoseGrowth: p.fertDoseGrowth || '',
-    fertDoseDormant: p.fertDoseDormant || '',
-    growthMonthStart: p.growthMonthStart || '',
-    growthMonthEnd: p.growthMonthEnd || ''
-  };
-  // Optimistisches Update
-  p.fertDoseGrowth = growth;
-  p.fertDoseDormant = dormant;
-  p.growthMonthStart = mStart;
-  p.growthMonthEnd = mEnd;
-
-  if (hint) hint.textContent = 'Speichert…';
-  apiFetch({
-    action: 'update', id: p.id,
-    fertDoseGrowth: growth,
-    fertDoseDormant: dormant,
-    growthMonthStart: mStart,
-    growthMonthEnd: mEnd
-  }).then(function(res){
-    if (res.ok) {
-      toast('Dosierung gespeichert');
-      // Zurueck in Lesemodus + ggf. Karten-Badge aktualisieren
-      doseEditOverride = false;
-      renderDetailCare(p);
-      renderGrid();
-    } else {
-      // Rollback
-      p.fertDoseGrowth = prev.fertDoseGrowth;
-      p.fertDoseDormant = prev.fertDoseDormant;
-      p.growthMonthStart = prev.growthMonthStart;
-      p.growthMonthEnd = prev.growthMonthEnd;
-      if (hint) hint.textContent = 'Fehler: '+(res.error||'?');
-    }
-  }).catch(function(){
-    p.fertDoseGrowth = prev.fertDoseGrowth;
-    p.fertDoseDormant = prev.fertDoseDormant;
-    p.growthMonthStart = prev.growthMonthStart;
-    p.growthMonthEnd = prev.growthMonthEnd;
-    if (hint) hint.textContent = 'Verbindungsfehler';
-  });
 }
 
 // Pflegeplan im Detail-Modal neu generieren, ohne Tab-Wechsel
@@ -4754,10 +4332,6 @@ function showPanel(name,btn){
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   btn.classList.add('on');
   document.getElementById('panel-'+name).classList.add('on');
-  // Mobile: aktiven Tab in den sichtbaren Bereich der scrollbaren Tab-Bar scrollen
-  if (btn.scrollIntoView) {
-    try { btn.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'}); } catch(e) {}
-  }
   if(name==='substrate') renderSubList();
   if(name==='duenger') renderFertList();
   if(name==='kalender') renderCalendarPanel();
@@ -5488,13 +5062,10 @@ function openZoneDetailModal(id) {
   zoneDetailId = id;
   // Reset auf Info-Tab
   document.getElementById('zone-detail-tab-info').classList.add('on');
-  document.getElementById('zone-detail-tab-plants').classList.remove('on');
   document.getElementById('zone-detail-tab-care').classList.remove('on');
   document.getElementById('zone-detail-panel-info').style.display = '';
-  document.getElementById('zone-detail-panel-plants').style.display = 'none';
   document.getElementById('zone-detail-panel-care').style.display = 'none';
   renderZoneDetailInfo(z);
-  renderZoneDetailPlants(z);
   renderZoneDetailCare(z);
   document.getElementById('zone-detail-overlay').classList.remove('hidden');
 }
@@ -5505,7 +5076,7 @@ function closeZoneDetailModal() {
 }
 
 function showZoneDetailTab(tab) {
-  ['info','plants','care'].forEach(function(t) {
+  ['info','care'].forEach(function(t) {
     document.getElementById('zone-detail-tab-' + t).classList.toggle('on', t === tab);
     document.getElementById('zone-detail-panel-' + t).style.display = t === tab ? '' : 'none';
   });
@@ -5562,92 +5133,6 @@ function openZoneEditFromDetail() {
   var id = zoneDetailId;
   closeZoneDetailModal();
   openZoneForm(id);
-}
-
-// Pflanzen-Tab im Bereichs-Detail (Phase 5k):
-// Liste aller Pflanzen, die in diesem Bereich gepflanzt sind, plus eine
-// Aggregat-Kopfzeile (Anzahl, aktive Events, frostempfindliche, invasive).
-function renderZoneDetailPlants(z) {
-  var box = document.getElementById('zone-detail-panel-plants');
-  if (!box) return;
-  var plantsInZone = outdoorPlants.filter(function(p){ return p.zoneId === z.id; });
-
-  if (plantsInZone.length === 0) {
-    box.innerHTML =
-      '<div class="empty" style="padding:2rem 1rem">'+
-        '<div style="margin-bottom:0.5rem">Noch keine Pflanzen in diesem Bereich.</div>'+
-        '<div style="font-size:12px;color:var(--muted)">'+
-          'Pflanzen mit dem Bereich "'+esc(z.name)+'" verknuepfen, um sie hier zu sehen.'+
-        '</div>'+
-      '</div>';
-    return;
-  }
-
-  // Aggregate
-  var nTotal = plantsInZone.length;
-  var nActive = 0, nFrostSensitive = 0, nInvasive = 0;
-  plantsInZone.forEach(function(p){
-    var evs = parseEvents(p.seasonalEvents);
-    if (evs.some(isEventActive)) nActive++;
-    if (p.hardy === 'nein' || p.hardy === 'bedingt') nFrostSensitive++;
-    if (p.invasive === 'ja') nInvasive++;
-  });
-
-  var summaryParts = [nTotal === 1 ? '1 Pflanze' : (nTotal + ' Pflanzen')];
-  if (nActive > 0) summaryParts.push('<strong style="color:var(--g2)">'+nActive+' mit aktiven Events</strong>');
-  if (nFrostSensitive > 0) summaryParts.push(nFrostSensitive + ' frostempfindlich');
-  if (nInvasive > 0) summaryParts.push(nInvasive + ' invasiv');
-
-  var summaryHtml =
-    '<div style="background:var(--gl);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6;color:var(--text)">'+
-      summaryParts.join(' &middot; ')+
-    '</div>';
-
-  // Sortierung: Pflanzen mit aktiven Events zuerst, dann alphabetisch
-  plantsInZone.sort(function(a, b){
-    var aActive = parseEvents(a.seasonalEvents).some(isEventActive) ? 1 : 0;
-    var bActive = parseEvents(b.seasonalEvents).some(isEventActive) ? 1 : 0;
-    if (aActive !== bActive) return bActive - aActive;
-    return (a.name || '').localeCompare(b.name || '', 'de');
-  });
-
-  var rows = plantsInZone.map(function(p){
-    var icon = OUTDOOR_CAT_ICONS[p.category] || '🌱';
-    var n = parseInt(p.count, 10);
-    var countLabel = (n && n > 1) ? ' <span style="color:var(--muted);font-size:12px">&times;' + n + '</span>' : '';
-    var pills = '';
-    var evs = parseEvents(p.seasonalEvents);
-    if (evs.some(isEventActive)) {
-      pills += '<span class="op-card-warn-pill" style="background:var(--gl);color:var(--g2);border-color:var(--g3)">🍂 aktives Event</span>';
-    }
-    if (p.hardy === 'nein') {
-      pills += '<span class="op-card-warn-pill frost">❄️ frostempfindlich</span>';
-    } else if (p.hardy === 'bedingt') {
-      pills += '<span class="op-card-warn-pill frost">❄️ bedingt frosthart</span>';
-    }
-    if (p.invasive === 'ja') {
-      pills += '<span class="op-card-warn-pill invasive">⚠️ invasiv</span>';
-    }
-    return '<div class="zone-plant-row" onclick="openOutdoorFromZoneDetail(\''+esc(p.id)+'\')">'+
-      '<div class="zone-plant-icon">'+icon+'</div>'+
-      '<div class="zone-plant-body">'+
-        '<div class="zone-plant-name">'+esc(p.name)+countLabel+'</div>'+
-        (pills ? '<div class="zone-plant-pills">'+pills+'</div>' : '')+
-      '</div>'+
-      '<div class="zone-plant-arrow">›</div>'+
-    '</div>';
-  }).join('');
-
-  box.innerHTML = summaryHtml + '<div class="zone-plant-list">' + rows + '</div>';
-}
-
-// Klick auf Pflanze im Bereichs-Detail: Bereichs-Modal schliessen, Pflanze oeffnen.
-// Dadurch laesst sich nach dem Schliessen der Pflanzen-Detail-Ansicht der Bereichs-Tab
-// nicht direkt wiederherstellen - akzeptabel, da der Workflow "Bereich -> Pflanze"
-// klar in eine Richtung geht.
-function openOutdoorFromZoneDetail(plantId) {
-  closeZoneDetailModal();
-  openOutdoorDetailModal(plantId);
 }
 
 function renderZoneDetailCare(z) {
@@ -6189,7 +5674,6 @@ function seedOutdoorPlantsUi() {
 var outdoorPlants = [];
 var outdoorEditId = null;
 var outdoorPlantsLoaded = false;
-var outdoorEventFilterOn = false; // Phase 5k: Filter "Nur Pflanzen mit aktiven Events"
 
 var OUTDOOR_CAT_ICONS = {
   staude: '🌿',
@@ -7105,7 +6589,7 @@ function renderOutdoorTimeline() {
       var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
       return '<div class="tl-event">'+
         '<div class="tl-event-main">'+
-          '<div class="tl-event-title"><strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+'</div>'+
+          '<div class="tl-event-title"><a class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+'</div>'+
           (zonePill || recLabel ? '<div class="tl-event-meta">'+zonePill+recLabel+'</div>' : '')+
         '</div>'+
         '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
@@ -7191,7 +6675,7 @@ function renderOutdoorEventsBlock(events, totalCount) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
-        '<strong>'+esc(e.plantName)+':</strong> '+esc(e.text)+recPill+
+        '<a class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+recPill+
       '</div>'+
       '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
     '</div>';
@@ -7213,17 +6697,6 @@ function renderOutdoorGrid() {
   var fzone = document.getElementById('op-fzone').value;
   var fcat = document.getElementById('op-fcat').value;
 
-  // Phase 5k: Toggle "Mit Events" - sichtbar wenn ueberhaupt Pflanzen mit aktiven Events da sind
-  var anyActive = outdoorPlants.some(function(p){
-    return parseEvents(p.seasonalEvents).some(isEventActive);
-  });
-  var toggle = document.getElementById('op-event-toggle');
-  if (toggle) {
-    toggle.style.display = anyActive ? '' : 'none';
-    toggle.textContent = outdoorEventFilterOn ? 'Mit Events ✓' : 'Mit Events';
-    toggle.classList.toggle('on', outdoorEventFilterOn);
-  }
-
   var visible = outdoorPlants.filter(function(p) {
     if (srch) {
       var hay = (p.name + ' ' + (p.notes || '') + ' ' + (p.companions || '')).toLowerCase();
@@ -7231,10 +6704,6 @@ function renderOutdoorGrid() {
     }
     if (fzone && p.zoneId !== fzone) return false;
     if (fcat && p.category !== fcat) return false;
-    if (outdoorEventFilterOn) {
-      var evs = parseEvents(p.seasonalEvents);
-      if (!evs.some(isEventActive)) return false;
-    }
     return true;
   });
 
@@ -7244,9 +6713,7 @@ function renderOutdoorGrid() {
       empty.style.display = 'block';
     } else {
       empty.style.display = 'none';
-      var msg = 'Keine Pflanzen passen zu den Filtern.';
-      if (outdoorEventFilterOn) msg = 'Keine Pflanzen mit aktiven Events.';
-      grid.innerHTML = '<div class="care-placeholder">'+msg+'</div>';
+      grid.innerHTML = '<div class="care-placeholder">Keine Pflanzen passen zu den Filtern.</div>';
     }
     document.getElementById('nav-count').textContent = '';
     return;
@@ -7254,12 +6721,6 @@ function renderOutdoorGrid() {
   empty.style.display = 'none';
   grid.innerHTML = visible.map(function(p){return renderOutdoorCard(p);}).join('');
   document.getElementById('nav-count').textContent = visible.length + ' Pflanzen';
-}
-
-// Phase 5k: Toggle fuer "Nur Pflanzen mit aktiven Events" im Outdoor-Grid.
-function toggleOutdoorEventFilter() {
-  outdoorEventFilterOn = !outdoorEventFilterOn;
-  renderOutdoorGrid();
 }
 
 function renderOutdoorCard(p) {
@@ -7605,7 +7066,6 @@ function openOutdoorDetailModal(plantId) {
   document.getElementById('op-detail-panel-care').style.display = 'none';
   renderOutdoorDetailInfo(p);
   renderOutdoorDetailCare(p);
-  loadCareLogForDetail(plantId, false);
   document.getElementById('op-detail-overlay').classList.remove('hidden');
 }
 
@@ -7714,7 +7174,6 @@ function renderOutdoorDetailInfo(p) {
     notesHtml +
     careInfo +
     eventsHtml +
-    renderCareLogFold(p.id) +
     '<div class="detail-actions" style="margin-top:1rem;display:flex;gap:8px">'+
       '<button class="btn" onclick="openOutdoorEditFromDetail()">Bearbeiten</button>'+
     '</div>';
