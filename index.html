@@ -62,13 +62,17 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 @media (max-width: 700px) {
   .mode-btn { padding: 5px 9px; font-size: 12px; }
   .mode-btn-label { display: none; }
+  .nav-logo-text { display: none; }
+  .nav-tabs { gap: 1px; }
+  .nav-tab { padding: 6px 10px; font-size: 12px; }
 }
-.nav-tabs { display: flex; gap: 2px; margin: 0 auto; }
+.nav-tabs { display: flex; gap: 2px; margin: 0 auto; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.nav-tabs::-webkit-scrollbar { display: none; }
 .nav-tab {
   padding: 7px 18px; border: none; background: none;
   font-family: 'DM Sans', sans-serif; font-size: 14px;
   color: var(--muted); cursor: pointer; border-radius: 20px;
-  transition: all .15s;
+  transition: all .15s; white-space: nowrap; flex-shrink: 0;
 }
 .nav-tab.on  { background: var(--gl); color: var(--g2); font-weight: 500; }
 .nav-tab:hover:not(.on) { background: var(--bg); color: var(--text); }
@@ -1201,7 +1205,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 <div class="toast" id="toast"></div>
 
 <nav class="nav">
-  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span> Pflanzenkompendium</div>
+  <div class="nav-logo"><span class="nav-logo-leaf">🌿</span><span class="nav-logo-text"> Pflanzenkompendium</span></div>
   <div class="mode-switch" role="tablist" aria-label="Modus">
     <button class="mode-btn on" id="mode-indoor" onclick="setMode('indoor')" role="tab" aria-selected="true">
       <span class="mode-btn-icon">🏠</span><span class="mode-btn-label">Indoor</span>
