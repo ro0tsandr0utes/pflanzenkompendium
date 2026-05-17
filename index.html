@@ -747,7 +747,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .care-banner-icon { font-size: 22px; flex-shrink: 0; }
 .care-banner-text { flex: 1; }
 .care-banner-text strong { font-weight: 500; }
-.care-plant-link { font-weight: 600; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color .15s; }
+.care-plant-link { font-weight: 600; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color .15s; -webkit-tap-highlight-color: rgba(0,0,0,.1); }
 .care-plant-link:hover { text-decoration-color: currentColor; }
 
 .care-events-fold {
@@ -2169,7 +2169,7 @@ function renderEventsBlock(events) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
-        '<a class="care-plant-link" onclick="openDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+recPill+
+        '<span class="care-plant-link" onclick="openDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</span>: '+esc(e.text)+recPill+
       '</div>'+
       '<button class="quick-btn" onclick="markEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
     '</div>';
@@ -6589,7 +6589,7 @@ function renderOutdoorTimeline() {
       var tip = rec > 1 ? ('Auf nächstes Mal verschieben (alle '+rec+' Jahre)') : 'Auf nächstes Jahr verschieben';
       return '<div class="tl-event">'+
         '<div class="tl-event-main">'+
-          '<div class="tl-event-title"><a class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+'</div>'+
+          '<div class="tl-event-title"><span class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</span>: '+esc(e.text)+'</div>'+
           (zonePill || recLabel ? '<div class="tl-event-meta">'+zonePill+recLabel+'</div>' : '')+
         '</div>'+
         '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
@@ -6675,7 +6675,7 @@ function renderOutdoorEventsBlock(events, totalCount) {
     return '<div class="care-event">'+
       '<div class="care-event-text">'+
         '<span class="care-event-date">'+esc(fmtDate(e.date))+'</span> '+
-        '<a class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</a>: '+esc(e.text)+recPill+
+        '<span class="care-plant-link" onclick="openOutdoorDetailModal(\''+e.plantId+'\')">'+esc(e.plantName)+'</span>: '+esc(e.text)+recPill+
       '</div>'+
       '<button class="quick-btn" onclick="markOutdoorEventDone(\''+e.plantId+'\',\''+e.date+'\')" title="'+esc(tip)+'">✓ Erledigt</button>'+
     '</div>';
