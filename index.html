@@ -1180,6 +1180,13 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       </div>
     </div>
     <div class="form-row" style="margin-bottom:.5rem">
+      <div class="form-group">
+        <button type="button" class="mix-ai-btn" id="c-ai-btn" onclick="suggestCircuitSchedule()">✦ KI: Dauer &amp; Häufigkeit vorschlagen</button>
+        <div class="form-hint" style="font-size:12px;color:var(--muted);margin-top:4px">Basierend auf den Pflanzen in den Bereichen dieses Kreislaufs.</div>
+        <div id="c-ai-suggestions" style="display:none;margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:.5rem">
       <div class="form-group" style="max-width:160px">
         <label class="form-label">Aktiv</label>
         <select class="form-select" id="c-active">
@@ -5312,6 +5319,7 @@ function generateZoneCarePlan() {
 var CIRCUITS = [];
 var circuitsLoaded = false;
 var circuitEditId = null;
+var circuitScheduleSuggestion = null; // letzter KI-Vorschlag {days, durationMin, weeklyMm, reason}
 
 var DAYS_DE = [
   {key: 'Mo', label: 'Mo'},
@@ -5474,6 +5482,11 @@ function openCircuitForm(id) {
     '</label>';
   }).join('');
 
+  // KI-Vorschlags-Container leeren
+  circuitScheduleSuggestion = null;
+  var cAiBox = document.getElementById('c-ai-suggestions');
+  if (cAiBox) { cAiBox.style.display = 'none'; cAiBox.innerHTML = ''; }
+
   document.getElementById('c-delete-btn').style.display = isEdit ? '' : 'none';
   document.getElementById('circuit-overlay').classList.remove('hidden');
 }
@@ -5488,6 +5501,209 @@ function applyCircuitFlowPreset() {
   if (v === '') return;
   document.getElementById('c-flowMmPerHour').value = v;
   document.getElementById('c-flowPreset').value = ''; // wieder zuruecksetzen
+}
+
+// === KI-Vorschlag: Bewaesserungs-Dauer + Haeufigkeit (Phase O9.x) ===
+// Liest die Bereiche, die diesem Kreislauf zugeordnet sind, sammelt deren
+// Pflanzen + Eigenschaften und laesst die KI Wochentage + Dauer/Lauf vorschlagen.
+function suggestCircuitSchedule() {
+  var box = document.getElementById('c-ai-suggestions');
+  var idVal = document.getElementById('c-id').value.trim();
+  if (!idVal) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Erst eine Kreislauf-ID vergeben.</div>';
+    return;
+  }
+  if (!cfg.key) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Kein API-Key hinterlegt — Vorschlag nicht möglich.</div>';
+    return;
+  }
+
+  // Garten-Daten sicherstellen (Bereiche + Outdoor-Pflanzen), falls Modal vor
+  // dem Sammlung-Tab geoeffnet wurde.
+  var needPlants = !outdoorPlantsLoaded;
+  var needZones = !zonesLoaded;
+  if (needPlants || needZones) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-loading"><span class="ldots">Lade Garten-Daten</span></div>';
+    var pPlants = needPlants ? apiFetch({action: 'getOutdoorPlants'}) : Promise.resolve({ok:true, data:outdoorPlants});
+    var pZones  = needZones  ? apiFetch({action: 'getZones'})        : Promise.resolve({ok:true, data:ZONES});
+    Promise.all([pPlants, pZones]).then(function(results) {
+      if (needPlants && results[0] && results[0].ok && Array.isArray(results[0].data)) {
+        outdoorPlants = results[0].data; outdoorPlantsLoaded = true;
+      }
+      if (needZones && results[1] && results[1].ok && Array.isArray(results[1].data)) {
+        ZONES = results[1].data; zonesLoaded = true;
+      }
+      runCircuitScheduleSuggestion(idVal);
+    }).catch(function() {
+      box.innerHTML = '<div class="zone-suggest-err">Verbindungsfehler beim Laden der Garten-Daten.</div>';
+    });
+    return;
+  }
+  runCircuitScheduleSuggestion(idVal);
+}
+
+function runCircuitScheduleSuggestion(idVal) {
+  var box = document.getElementById('c-ai-suggestions');
+  var btn = document.getElementById('c-ai-btn');
+  var nameVal = document.getElementById('c-name').value.trim();
+
+  // Bereiche, die auf diesem Kreislauf liegen
+  var servedZones = ZONES.filter(function(z) {
+    return z.irrigationCircuit === idVal && z.active !== 'false';
+  });
+  if (!servedZones.length) {
+    box.style.display = 'block';
+    box.innerHTML = '<div class="zone-suggest-err">Diesem Kreislauf sind keine aktiven Bereiche zugeordnet — erst Bereiche auf "' + esc(idVal) + '" legen.</div>';
+    return;
+  }
+
+  // Pflanzen in diesen Bereichen
+  var zoneIdSet = {};
+  servedZones.forEach(function(z){ zoneIdSet[z.id] = true; });
+  var servedPlants = outdoorPlants.filter(function(p){ return zoneIdSet[p.zoneId]; });
+
+  var flow = parseFloat(document.getElementById('c-flowMmPerHour').value);
+  if (isNaN(flow) || flow < 0) flow = 0;
+
+  // Loading-State
+  btn.disabled = true;
+  var btnLabel = btn.innerHTML;
+  btn.textContent = 'KI denkt nach…';
+  box.style.display = 'block';
+  box.innerHTML = '<div class="zone-suggest-loading"><span class="ldots">Berechne Giessplan</span></div>';
+
+  // Bereiche fuer Prompt (mit kc als Wasserbedarf-Anker)
+  var zoneList = servedZones.map(function(z) {
+    var parts = [];
+    if (z.category)    parts.push('Typ: ' + (ZONE_CAT_LABELS[z.category] || z.category));
+    if (z.sun)         parts.push('Sonne: ' + (ZONE_SUN_LABELS[z.sun] || z.sun));
+    if (z.orientation) parts.push('Ausrichtung: ' + z.orientation);
+    if (z.soil)        parts.push('Boden: ' + z.soil);
+    if (z.areaM2)      parts.push('Flaeche: ' + z.areaM2 + ' m2');
+    parts.push('kc=' + (ZONE_KC_BY_CATEGORY[z.category] || ZONE_KC_DEFAULT));
+    return '- ' + z.name + ' (' + parts.join(', ') + ')';
+  }).join('\n');
+
+  // Pflanzen fuer Prompt
+  var plantList = servedPlants.map(function(p) {
+    var parts = [];
+    if (p.category) parts.push(OUTDOOR_CAT_LABELS[p.category] || p.category);
+    if (p.count && parseInt(p.count, 10) > 1) parts.push('Anzahl ' + p.count);
+    if (p.wateringIntervalWeeks) parts.push('Giess-Intervall ' + p.wateringIntervalWeeks + ' Wo');
+    if (p.notes) parts.push(String(p.notes).slice(0, 140));
+    return '- ' + p.name + (parts.length ? ' (' + parts.join(', ') + ')' : '');
+  }).join('\n');
+
+  var monthNamesPrompt = ['Januar','Februar','Maerz','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var monthName = monthNamesPrompt[new Date().getMonth()];
+
+  // Optionaler Wetterkontext (ET0 + Regen), falls bereits geladen
+  var weatherLine = '';
+  if (WEATHER_DATA) {
+    try {
+      var info = analyzeWeather(WEATHER_DATA);
+      var et0vals = [];
+      if (info && info.et0ByDate) {
+        Object.keys(info.et0ByDate).forEach(function(k){
+          var v = info.et0ByDate[k];
+          if (typeof v === 'number' && !isNaN(v)) et0vals.push(v);
+        });
+      }
+      if (et0vals.length) {
+        var avgEt0 = et0vals.reduce(function(a,b){return a+b;}, 0) / et0vals.length;
+        weatherLine = 'Wetterkontext: ca. ' + avgEt0.toFixed(1) + ' mm/Tag Verdunstung (ET0)';
+        if (info.pastRainMm != null) weatherLine += ', ' + Math.round(info.pastRainMm) + ' mm Regen in den letzten Tagen';
+        weatherLine += '.';
+      }
+    } catch (e) { weatherLine = ''; }
+  }
+
+  var prompt =
+    'Du bist Bewaesserungs-Experte fuer einen Garten in Brandenburg (Klimazone 7a, oft Sandboden, sommerwarm-trocken). ' +
+    'Fuer einen automatischen Bewaesserungskreislauf soll ein sinnvoller Giessplan (Wochentage + Dauer pro Lauf) vorgeschlagen werden.\n\n' +
+    'Kreislauf: ' + idVal + (nameVal ? ' (' + nameVal + ')' : '') + '\n' +
+    'Wassergabe der Anlage: ' + (flow > 0 ? flow + ' mm/h' : 'unbekannt') + '\n' +
+    'Aktueller Monat: ' + monthName + '\n\n' +
+    'Bewaesserte Bereiche:\n' + zoneList + '\n\n' +
+    'Pflanzen in diesen Bereichen:\n' + (plantList || '(keine Pflanzen erfasst)') + '\n\n' +
+    (weatherLine ? weatherLine + '\n\n' : '') +
+    'Aufgabe: Schlage Wochentage und Dauer pro Lauf vor, sodass die Pflanzen im aktuellen Monat ausreichend, aber nicht uebermaessig versorgt werden. ' +
+    'Beruecksichtige Wasserbedarf der Pflanzenarten, Sonne/Boden/Flaeche der Bereiche (hoeheres kc = mehr Bedarf) und die Jahreszeit (Hochsommer mehr, Fruehjahr/Herbst weniger, Winter ggf. aus). ' +
+    (flow > 0
+      ? 'Rechne mit der Wassergabe: Dauer[min]/60 x mm/h = mm pro Lauf. Ziel ist eine sinnvolle Wochenmenge in mm. '
+      : 'Die Wassergabe ist unbekannt - schlage die Dauer als grobe Daumenregel vor. ') +
+    'Lieber seltener und durchdringend als taeglich kurz (foerdert tiefe Wurzeln). ' +
+    'Wochentage als Kuerzel ausschliesslich aus: Mo, Di, Mi, Do, Fr, Sa, So.\n\n' +
+    'Antworte NUR mit JSON:\n' +
+    '{"days":["Mo","Do"],"durationMin":25,"weeklyMm":10,"reason":"kurze Begruendung auf Deutsch"}';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:500, system:'Bewaesserungs-Experte. Nur valides JSON, keine Backticks.', messages:[{role:'user', content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = btnLabel;
+    var raw = data.content && data.content.find(function(b){return b.type==='text';});
+    raw = raw ? raw.text : '{}';
+    var obj;
+    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
+    catch (e) {
+      box.innerHTML = '<div class="zone-suggest-err">KI-Antwort konnte nicht verarbeitet werden.</div>';
+      return;
+    }
+    var validDayKeys = {Mo:1, Di:1, Mi:1, Do:1, Fr:1, Sa:1, So:1};
+    var days = Array.isArray(obj.days) ? obj.days.filter(function(d){return validDayKeys[d];}) : [];
+    var dur = parseInt(obj.durationMin, 10);
+    if (isNaN(dur) || dur < 0) dur = 0;
+    if (dur > 240) dur = 240;
+    circuitScheduleSuggestion = {
+      days: days,
+      durationMin: dur,
+      weeklyMm: (typeof obj.weeklyMm === 'number') ? obj.weeklyMm : null,
+      reason: obj.reason || ''
+    };
+    renderCircuitSuggestion(circuitScheduleSuggestion);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = btnLabel;
+    box.innerHTML = '<div class="zone-suggest-err">Verbindungsfehler bei KI-Anfrage.</div>';
+  });
+}
+
+function renderCircuitSuggestion(s) {
+  var box = document.getElementById('c-ai-suggestions');
+  var dayLabel = (s.days && s.days.length) ? s.days.join(', ') : 'keine Tage (Pause)';
+  var durLabel = s.durationMin ? (s.durationMin + ' Min/Lauf') : 'keine Dauer';
+  var mmLabel = (s.weeklyMm != null) ? (' · ~' + s.weeklyMm + ' mm/Woche') : '';
+  box.style.display = 'block';
+  box.innerHTML = '<div class="zone-suggest-card">' +
+    '<div class="zone-suggest-name">' + esc(dayLabel) + ' · ' + esc(durLabel) + esc(mmLabel) + '</div>' +
+    '<div class="zone-suggest-reason">' + esc(s.reason || '') + '</div>' +
+    '<div class="zone-suggest-actions">' +
+      '<button type="button" class="act-btn" onclick="applyCircuitSuggestion()">Übernehmen</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function applyCircuitSuggestion() {
+  var s = circuitScheduleSuggestion;
+  if (!s) return;
+  // Tage-Checkboxen setzen
+  var wanted = {};
+  (s.days || []).forEach(function(d){ wanted[d] = true; });
+  document.querySelectorAll('.c-day-check').forEach(function(cb) {
+    cb.checked = !!wanted[cb.value];
+  });
+  // Dauer setzen (nur wenn ein Wert vorgeschlagen wurde)
+  if (s.durationMin) document.getElementById('c-durationMin').value = s.durationMin;
+  var box = document.getElementById('c-ai-suggestions');
+  box.style.display = 'none';
+  box.innerHTML = '';
+  toast('Vorschlag übernommen — vor dem Speichern prüfen');
 }
 
 function saveCircuit() {
