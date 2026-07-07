@@ -991,6 +991,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <button class="btn" onclick="bulkRefreshOutdoorCare()" id="bulk-out-btn">Alle Outdoor-Pflegepläne aktualisieren</button>
       <span id="bulk-out-status" class="setup-ok"></span>
     </div>
+    <div class="setup-hint" id="build-info" style="margin-top:1.25rem;text-align:center"></div>
   </div>
 </div>
 
@@ -1627,6 +1628,11 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 </main>
 
 <script>
+// Build-Kennung: wird im Einstellungs-Modal angezeigt und beim Start in die
+// Konsole geloggt. Bei jeder Auslieferung hochzaehlen - damit ist sofort
+// pruefbar, ob Browser/Handy wirklich den neuen Stand geladen haben.
+var PFK_BUILD = '2026-07-07 F1.1';
+
 var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C1D','#686860'];
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
 
@@ -7983,6 +7989,11 @@ function buildZoneContextForPrompt(z) {
 }
 
 (function boot(){
+  // Build-Kennung: Konsole + Einstellungs-Modal (Zahnrad), zur schnellen
+  // Pruefung ob der neueste Stand geladen ist
+  try { console.log('Pflanzenkompendium Build', PFK_BUILD); } catch(e){}
+  var bi = document.getElementById('build-info');
+  if (bi) bi.textContent = 'Build ' + PFK_BUILD;
   loadMode();
   // loadCfg() vor applyMode() damit applyMode() weiss ob die App konfiguriert
   // ist und Outdoor-Daten direkt laden kann.
