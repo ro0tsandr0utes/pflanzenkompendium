@@ -929,6 +929,11 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <input class="form-input" id="cfg-key" type="password" placeholder="sk-ant-api03-…" style="width:100%" />
       <div class="setup-hint">console.anthropic.com → API Keys → Create Key</div>
     </div>
+    <div class="setup-group">
+      <div class="setup-section-label">API-Token (optional)</div>
+      <input class="form-input" id="cfg-token" type="password" placeholder="Leer lassen, wenn kein Token gesetzt ist" style="width:100%" />
+      <div class="setup-hint">Nur nötig, wenn in Code.gs die Konstante API_TOKEN gesetzt ist. Schützt die Web-App-URL vor fremden Zugriffen.</div>
+    </div>
     <div class="setup-actions">
       <button class="btn primary" onclick="saveConfig()">Speichern &amp; starten</button>
       <span class="setup-err" id="cfg-err"></span>
@@ -1737,7 +1742,11 @@ function dueStatus(plant, type) {
 }
 
 function loadCfg() {
-  try { cfg.url = localStorage.getItem('pfk_url')||''; cfg.key = localStorage.getItem('pfk_key')||''; } catch(e){}
+  try {
+    cfg.url = localStorage.getItem('pfk_url')||'';
+    cfg.key = localStorage.getItem('pfk_key')||'';
+    cfg.token = localStorage.getItem('pfk_token')||''; // optional (Phase R1)
+  } catch(e){}
   return !!(cfg.url && cfg.key);
 }
 
@@ -1766,20 +1775,35 @@ function applyMode() {
     var el = document.getElementById('panel-' + name);
     if (el) el.classList.remove('on');
   });
-  // Tab-Highlight im aktiven Container zuruecksetzen, ersten Tab aktivieren
+  // Phase O9.5: zuletzt offenen Tab des Modus wiederherstellen.
+  // Fallback auf den Initial-Tab, wenn nichts gespeichert ist oder der
+  // gespeicherte Tab im aktuellen Modus nicht existiert.
   var activeContainer = MODE === 'indoor' ? 'nav-tabs-indoor' : 'nav-tabs-outdoor';
+  var modePanels = MODE === 'indoor' ? indoorPanels : outdoorPanels;
+  var savedTab = '';
+  try {
+    savedTab = localStorage.getItem(MODE === 'indoor' ? 'pfk_last_tab_indoor' : 'pfk_last_tab_outdoor') || '';
+  } catch(e){}
+  var targetIdx = modePanels.indexOf(savedTab);
+  if (targetIdx < 0) targetIdx = 0;
+  var targetPanel = modePanels[targetIdx];
+  // Reihenfolge der Tab-Buttons im Markup entspricht der Panel-Reihenfolge
+  // in indoorPanels/outdoorPanels - Index-Mapping ist daher sicher.
   var tabs = document.querySelectorAll('#' + activeContainer + ' .nav-tab');
-  tabs.forEach(function(t, i) { t.classList.toggle('on', i === 0); });
-  var firstPanel = MODE === 'indoor' ? 'sammlung' : 'out-sammlung';
-  var firstEl = document.getElementById('panel-' + firstPanel);
-  if (firstEl) firstEl.classList.add('on');
+  tabs.forEach(function(t, i) { t.classList.toggle('on', i === targetIdx); });
+  var targetEl = document.getElementById('panel-' + targetPanel);
+  if (targetEl) targetEl.classList.add('on');
   // Indoor-spezifische Status-Anzeige (nav-count) im Outdoor-Modus leer lassen
   var nc = document.getElementById('nav-count');
   if (nc && MODE === 'outdoor') nc.textContent = '';
-  // Outdoor: Daten fuer das initial sichtbare Panel laden, falls App schon konfiguriert ist.
-  // Sonst (Setup-Overlay-Phase): wird spaeter nach saveConfig nachgezogen.
-  if (MODE === 'outdoor' && cfg.url) {
-    openOutdoorPanel();
+  // Daten fuer das wiederhergestellte Panel laden. Outdoor-Loader brauchen
+  // die Apps-Script-URL - in der Setup-Overlay-Phase wird das spaeter nach
+  // saveConfig nachgezogen. Indoor-Renderer sind lokal und immer safe
+  // (werden nach init() durch renderAll ohnehin nochmal aktualisiert).
+  if (MODE === 'outdoor') {
+    if (cfg.url) loadPanelData(targetPanel);
+  } else {
+    loadPanelData(targetPanel);
   }
 }
 function setMode(m) {
@@ -1802,9 +1826,14 @@ function setMode(m) {
 function saveConfig() {
   var url = document.getElementById('cfg-url').value.trim();
   var key = document.getElementById('cfg-key').value.trim();
-  if (!url||!key) { document.getElementById('cfg-err').textContent='Beide Felder ausfüllen.'; return; }
-  try { localStorage.setItem('pfk_url',url); localStorage.setItem('pfk_key',key); } catch(e){}
-  cfg = {url:url, key:key};
+  var token = document.getElementById('cfg-token').value.trim();
+  if (!url||!key) { document.getElementById('cfg-err').textContent='URL und API Key ausfüllen.'; return; }
+  try {
+    localStorage.setItem('pfk_url',url);
+    localStorage.setItem('pfk_key',key);
+    localStorage.setItem('pfk_token',token);
+  } catch(e){}
+  cfg = {url:url, key:key, token:token};
   document.getElementById('cfg-err').textContent='';
   document.getElementById('overlay').classList.add('hidden');
   init();
@@ -1812,6 +1841,7 @@ function saveConfig() {
 function openSettings() {
   document.getElementById('cfg-url').value = cfg.url||'';
   document.getElementById('cfg-key').value = cfg.key||'';
+  document.getElementById('cfg-token').value = cfg.token||'';
   document.getElementById('cfg-err').textContent='';
   document.getElementById('seed-status').textContent='';
   // X nur anbieten wenn schon konfiguriert ist - sonst bleibt User ohne URL/Key haengen
@@ -1824,10 +1854,28 @@ function closeSettings() {
 }
 
 function apiFetch(params) {
-  var qs = Object.keys(params).map(function(k) {
-    return encodeURIComponent(k)+'='+encodeURIComponent(String(params[k]!=null?params[k]:''));
+  // Payload normalisieren (alles als String, wie bisher bei GET)
+  var payload = {};
+  Object.keys(params).forEach(function(k) {
+    payload[k] = String(params[k] != null ? params[k] : '');
+  });
+  // Optionales Shared-Token (Phase R1): nur mitschicken wenn konfiguriert
+  if (cfg.token) payload.token = cfg.token;
+  var qs = Object.keys(payload).map(function(k) {
+    return encodeURIComponent(k)+'='+encodeURIComponent(payload[k]);
   }).join('&');
-  return fetch(cfg.url+'?'+qs,{redirect:'follow'}).then(function(res) {
+  var url = cfg.url+'?'+qs;
+  var opts = {redirect:'follow'};
+  // Grosse Payloads (z.B. carePlan-JSON) per POST (Phase R1): Apps Script
+  // kappt GET-URLs im einstelligen KB-Bereich. Content-Type text/plain
+  // vermeidet den CORS-Preflight, den Apps Script nicht beantworten kann.
+  if (url.length > 1800) {
+    url = cfg.url;
+    opts.method = 'POST';
+    opts.headers = {'Content-Type': 'text/plain;charset=utf-8'};
+    opts.body = JSON.stringify(payload);
+  }
+  return fetch(url, opts).then(function(res) {
     if (!res.ok) throw new Error('HTTP '+res.status);
     return res.json();
   });
@@ -2417,19 +2465,31 @@ function markCare(id, type) {
   p[field] = iso;
   var payload = {action:'update', id:id};
   payload[field] = iso;
+  // Fluessigduenger wird mit dem Giesswasser ausgebracht: "Geduengt"
+  // impliziert deshalb auch "Gegossen". lastWatered wird mitgesetzt,
+  // sofern Giessen bei der Pflanze ueberhaupt getrackt ist.
+  var alsoWatered = false;
+  var prevWater = p.lastWatered;
+  if (type === 'fertilize' && parseInt(p.wateringIntervalWeeks) > 0) {
+    alsoWatered = true;
+    p.lastWatered = iso;
+    payload.lastWatered = iso;
+  }
   apiFetch(payload).then(function(res){
     if (!res.ok) {
       p[field] = prev;
+      if (alsoWatered) p.lastWatered = prevWater;
       toast('Fehler: '+(res.error||'?'));
       return;
     }
-    var label = type==='water' ? 'Gegossen' : 'Gedüngt';
+    var label = type==='water' ? 'Gegossen' : (alsoWatered ? 'Gegossen & gedüngt' : 'Gedüngt');
     var snapped = daysBetween(snap, dayStart(new Date())) !== 0;
     toast(label + (snapped ? ' (auf '+fmtDate(snap)+' gerundet)' : ''));
     renderBanner();
     renderGrid();
   }).catch(function(){
     p[field] = prev;
+    if (alsoWatered) p.lastWatered = prevWater;
     toast('Verbindungsfehler');
   });
 }
@@ -4336,6 +4396,18 @@ function saveRepot() {
   });
 }
 
+// Panel-spezifische Loader/Renderer. Von showPanel (Tab-Klick) und
+// applyMode (Init/Tab-Restore, Phase O9.5) gemeinsam genutzt.
+function loadPanelData(name) {
+  if(name==='substrate') renderSubList();
+  if(name==='duenger') renderFertList();
+  if(name==='kalender') renderCalendarPanel();
+  if(name==='out-bereiche') openZonesPanel();
+  if(name==='out-bewaesserung') openCircuitsPanel();
+  if(name==='out-sammlung') openOutdoorPanel();
+  if(name==='out-zeitleiste') openOutdoorTimelinePanel();
+}
+
 function showPanel(name,btn){
   // Tab-Highlight nur im aktiven Tab-Container zuruecksetzen
   var activeContainer = MODE === 'indoor' ? 'nav-tabs-indoor' : 'nav-tabs-outdoor';
@@ -4344,13 +4416,11 @@ function showPanel(name,btn){
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   btn.classList.add('on');
   document.getElementById('panel-'+name).classList.add('on');
-  if(name==='substrate') renderSubList();
-  if(name==='duenger') renderFertList();
-  if(name==='kalender') renderCalendarPanel();
-  if(name==='out-bereiche') openZonesPanel();
-  if(name==='out-bewaesserung') openCircuitsPanel();
-  if(name==='out-sammlung') openOutdoorPanel();
-  if(name==='out-zeitleiste') openOutdoorTimelinePanel();
+  // Phase O9.5: zuletzt offenen Tab pro Modus merken (Restore in applyMode)
+  try {
+    localStorage.setItem(MODE === 'indoor' ? 'pfk_last_tab_indoor' : 'pfk_last_tab_outdoor', name);
+  } catch(e){}
+  loadPanelData(name);
 }
 
 var _tt;
