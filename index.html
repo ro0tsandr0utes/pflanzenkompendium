@@ -328,6 +328,28 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .log-icon { flex: 0 0 auto; }
 .log-date { flex: 0 0 94px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .log-text { flex: 1; min-width: 0; }
+/* Foto-Diagnose im Lookup-Tab (Phase F1) */
+.diag-box {
+  margin-top: 1.25rem; padding: 1rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.diag-title { font-weight: 600; font-size: 15px; margin-bottom: .25rem; }
+.diag-hint { font-size: 12.5px; color: var(--muted); margin-bottom: .75rem; }
+.diag-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.diag-card {
+  margin-top: .9rem; padding: .9rem 1rem;
+  background: var(--bg); border: 1px solid var(--border-l); border-radius: 10px;
+  font-size: 14px;
+}
+.diag-head { display: flex; align-items: center; gap: 8px; margin-bottom: .5rem; flex-wrap: wrap; }
+.diag-sev {
+  font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 12px;
+}
+.diag-text { line-height: 1.5; }
+.diag-sec { font-weight: 600; font-size: 13px; margin: .75rem 0 .25rem; color: var(--g2); }
+.diag-list { margin: 0; padding-left: 1.25rem; line-height: 1.55; }
+.diag-list li { margin-bottom: 3px; }
 
 .detail-body {
   padding: 1.5rem 1.75rem 1.75rem;
@@ -1274,7 +1296,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <div class="form-row">
         <div class="form-group" style="flex:2;min-width:180px">
           <label class="form-label">Name</label>
-          <input class="form-input" id="f-name" placeholder="z.B. Philodendron gloriosum" />
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="f-name" placeholder="z.B. Philodendron gloriosum" style="flex:1" />
+            <button class="btn" id="f-photo-btn" type="button" title="Pflanze per Foto erkennen" onclick="document.getElementById('f-photo').click()">📷</button>
+            <input type="file" id="f-photo" accept="image/*" style="display:none" onchange="identifyPlantPhoto(this)" />
+          </div>
+          <div id="f-photo-status" style="font-size:12.5px;margin-top:4px;min-height:16px;color:var(--muted)"></div>
         </div>
         <div class="form-group" style="max-width:240px">
           <label class="form-label">Primäres Substrat</label>
@@ -1336,6 +1363,19 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     </div>
     <div class="care-result" id="care-result">
       <div class="care-placeholder">Schneller Pflegeplan-Lookup. Für Pflanzen aus der Sammlung steht der gespeicherte Plan auch im Details-Modal (Tab "Pflegeplan").</div>
+    </div>
+
+    <div class="diag-box">
+      <div class="diag-title">🩺 Foto-Diagnose</div>
+      <div class="diag-hint">Foto einer kränkelnden Pflanze hochladen — die KI erkennt Krankheiten, Schädlinge und Pflegefehler und schlägt Maßnahmen vor.</div>
+      <div class="diag-controls">
+        <button class="btn" type="button" onclick="document.getElementById('diag-photo').click()">📷 Foto wählen</button>
+        <input type="file" id="diag-photo" accept="image/*" style="display:none" onchange="diagPhotoChosen(this)" />
+        <input class="form-input" id="diag-context" placeholder="Optional: Symptome/Kontext, z.B. gelbe Blätter seit 2 Wochen, Südfenster" style="flex:1;min-width:200px" />
+        <button class="btn primary" id="diag-run-btn" onclick="runPhotoDiagnosis()" disabled>Diagnose starten</button>
+      </div>
+      <div id="diag-preview" style="margin-top:.6rem"></div>
+      <div id="diag-result"></div>
     </div>
   </div>
 
@@ -2002,6 +2042,183 @@ function extractJson(raw) {
     if (tryObj) { try { return JSON.parse(s.slice(oa, oe + 1)); } catch(e) {} }
   }
   return null;
+}
+
+// === Foto-Features (Phase F1): Identifikation + Diagnose ===
+// Gemeinsame Basis: Bild clientseitig verkleinern (max. 1568px Kante,
+// JPEG 85%) damit Handy-Fotos unter den API-Limits bleiben, dann als
+// Base64 an die Anthropic API (Vision) schicken.
+
+function readImageAsJpegBase64(file, maxDim, cb) {
+  var reader = new FileReader();
+  reader.onerror = function() { cb(new Error('Datei konnte nicht gelesen werden')); };
+  reader.onload = function() {
+    var img = new Image();
+    img.onerror = function() { cb(new Error('Bild konnte nicht dekodiert werden')); };
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (!w || !h) { cb(new Error('Bild hat keine Groesse')); return; }
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * scale));
+      var ch = Math.max(1, Math.round(h * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, cw, ch);
+      var dataUrl;
+      try { dataUrl = canvas.toDataURL('image/jpeg', 0.85); }
+      catch(e) { cb(new Error('Bild konnte nicht konvertiert werden')); return; }
+      cb(null, dataUrl.split(',')[1]);
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Vision-Request an die Anthropic API: ein Bild + Prompt, Antwort als
+// {obj, err} - obj ist das geparste JSON oder null mit Fehlermeldung.
+function aiVisionRequest(base64Jpeg, promptText, maxTokens, cb) {
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system: 'Zimmerpflanzen- und Gartenexperte. Nur valides JSON, keine Backticks.',
+      messages: [{role:'user', content: [
+        {type:'image', source:{type:'base64', media_type:'image/jpeg', data: base64Jpeg}},
+        {type:'text', text: promptText}
+      ]}]
+    })
+  }).then(function(r){ return r.json(); }).then(function(data) {
+    if (data && data.error) { cb(null, data.error.message || data.error.type || 'API-Fehler'); return; }
+    var block = data && data.content && data.content.find(function(b){return b.type==='text';});
+    var obj = extractJson(block ? block.text : '');
+    if (!obj) { cb(null, 'Antwort konnte nicht verarbeitet werden'); return; }
+    cb(obj, null);
+  }).catch(function(err) {
+    cb(null, 'Verbindungsfehler: ' + (err && err.message ? err.message : '?'));
+  });
+}
+
+// --- Identifikation beim Hinzufuegen: Foto -> Name ins Formular ---
+function identifyPlantPhoto(input) {
+  var file = input.files && input.files[0];
+  input.value = ''; // Reset, damit dieselbe Datei erneut waehlbar ist
+  if (!file) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+  var st = document.getElementById('f-photo-status');
+  var btn = document.getElementById('f-photo-btn');
+  st.textContent = 'Erkenne Pflanze…';
+  st.style.color = 'var(--muted)';
+  btn.disabled = true;
+  readImageAsJpegBase64(file, 1568, function(err, b64) {
+    if (err) { st.textContent = err.message; st.style.color = 'var(--danger)'; btn.disabled = false; return; }
+    var prompt = 'Identifiziere die Pflanze auf dem Foto (vermutlich Zimmerpflanze). '+
+      'Antworte NUR mit JSON:\n'+
+      '{"name":"Deutscher Name (Botanischer Name)","confidence":"hoch|mittel|niedrig",'+
+      '"alternatives":["...","..."],"hinweis":"..."}\n'+
+      'name: gaengiger deutscher Handelsname plus botanischer Name in Klammern, so wie man die Pflanze in einer Sammlung beschriften wuerde. '+
+      'alternatives: 0-2 andere plausible Arten/Sorten wenn die Bestimmung nicht eindeutig ist, sonst leeres Array. '+
+      'hinweis: 1 kurzer Satz zu einer pflegerelevanten Besonderheit dieser Art, oder leer.';
+    aiVisionRequest(b64, prompt, 500, function(obj, apiErr) {
+      btn.disabled = false;
+      if (apiErr) { st.textContent = apiErr; st.style.color = 'var(--danger)'; return; }
+      if (!obj.name) { st.textContent = 'Keine Pflanze erkannt.'; st.style.color = 'var(--danger)'; return; }
+      document.getElementById('f-name').value = obj.name;
+      // Hinweis in Notizen uebernehmen, aber nur wenn Notizen noch leer sind
+      var notesEl = document.getElementById('f-notes');
+      if (obj.hinweis && !notesEl.value.trim()) notesEl.value = obj.hinweis;
+      var confMap = {hoch:'✓ Erkannt', mittel:'✓ Erkannt (mittlere Sicherheit)', niedrig:'⚠ Unsicher erkannt'};
+      var msg = confMap[obj.confidence] || '✓ Erkannt';
+      if (Array.isArray(obj.alternatives) && obj.alternatives.length > 0) {
+        msg += ' — Alternativen: ' + obj.alternatives.join(', ');
+      }
+      st.textContent = msg;
+      st.style.color = obj.confidence === 'niedrig' ? 'var(--danger)' : 'var(--g2)';
+    });
+  });
+}
+
+// --- Foto-Diagnose im Lookup-Tab ---
+var diagFile = null;
+var diagObjectUrl = null;
+
+function diagPhotoChosen(input) {
+  var file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  diagFile = file;
+  if (diagObjectUrl) { try { URL.revokeObjectURL(diagObjectUrl); } catch(e){} }
+  diagObjectUrl = URL.createObjectURL(file);
+  document.getElementById('diag-preview').innerHTML =
+    '<img src="'+diagObjectUrl+'" alt="Foto-Vorschau" style="max-height:130px;max-width:100%;border-radius:8px;border:1px solid var(--border)" />';
+  document.getElementById('diag-run-btn').disabled = false;
+  document.getElementById('diag-result').innerHTML = '';
+}
+
+function runPhotoDiagnosis() {
+  if (!diagFile) return;
+  if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
+  var btn = document.getElementById('diag-run-btn');
+  var box = document.getElementById('diag-result');
+  btn.disabled = true;
+  box.innerHTML = '<div class="care-placeholder"><div class="spinner"></div><br><span class="ldots">Diagnose läuft</span></div>';
+  var context = document.getElementById('diag-context').value.trim();
+  readImageAsJpegBase64(diagFile, 1568, function(err, b64) {
+    if (err) {
+      box.innerHTML = '<div style="color:var(--danger);font-size:14px;padding:.5rem 0">'+esc(err.message)+'</div>';
+      btn.disabled = false;
+      return;
+    }
+    var prompt = 'Auf dem Foto ist eine Pflanze mit moeglichen Problemen (Krankheit, Schaedlinge, Pflegefehler). '+
+      (context ? 'Zusatzinfo vom Besitzer: "'+context.replace(/"/g, "'")+'". ' : '') +
+      'Diagnostiziere anhand des Fotos. Antworte NUR mit JSON:\n'+
+      '{"pflanze":"erkannte Pflanze oder leer","gesund":true|false,"diagnose":"...",'+
+      '"schweregrad":"leicht|mittel|ernst","ursachen":["..."],"massnahmen":["..."],"prognose":"..."}\n'+
+      'diagnose: 1-2 Saetze, das wahrscheinlichste Problem zuerst. '+
+      'ursachen: 2-4 wahrscheinlichste Ursachen, absteigend sortiert. '+
+      'massnahmen: 3-5 konkrete Schritte, nach Prioritaet sortiert, direkt umsetzbar. '+
+      'prognose: 1-2 Saetze zur Erholungschance. '+
+      'Wenn die Pflanze gesund aussieht: gesund=true, diagnose beschreibt den guten Zustand, massnahmen enthaelt 1-2 Tipps zum Erhalt. '+
+      'Deutsch, konkret, keine Allgemeinplaetze.';
+    aiVisionRequest(b64, prompt, 1500, function(obj, apiErr) {
+      btn.disabled = false;
+      if (apiErr) {
+        box.innerHTML = '<div style="color:var(--danger);font-size:14px;padding:.5rem 0">'+esc(apiErr)+'</div>';
+        return;
+      }
+      renderDiagnosisResult(obj);
+    });
+  });
+}
+
+function renderDiagnosisResult(obj) {
+  var box = document.getElementById('diag-result');
+  var sevColors = {leicht:'#2E7D32', mittel:'#B26A00', ernst:'#B71C1C'};
+  var sevBgs = {leicht:'#E7F2E4', mittel:'#FBF0DC', ernst:'#FBE4E4'};
+  var sev = obj.schweregrad || '';
+  var html = '<div class="diag-card">';
+  var headParts = [];
+  if (obj.pflanze) headParts.push('<span style="font-weight:600">'+esc(obj.pflanze)+'</span>');
+  if (obj.gesund === true) {
+    headParts.push('<span class="diag-sev" style="color:#2E7D32;background:#E7F2E4">✓ gesund</span>');
+  } else if (sev && sevColors[sev]) {
+    headParts.push('<span class="diag-sev" style="color:'+sevColors[sev]+';background:'+sevBgs[sev]+'">'+esc(sev)+'</span>');
+  }
+  if (headParts.length) html += '<div class="diag-head">'+headParts.join(' ')+'</div>';
+  if (obj.diagnose) html += '<div class="diag-text">'+esc(obj.diagnose)+'</div>';
+  if (Array.isArray(obj.ursachen) && obj.ursachen.length) {
+    html += '<div class="diag-sec">Wahrscheinliche Ursachen</div><ul class="diag-list">'+
+      obj.ursachen.map(function(u){return '<li>'+esc(u)+'</li>';}).join('')+'</ul>';
+  }
+  if (Array.isArray(obj.massnahmen) && obj.massnahmen.length) {
+    html += '<div class="diag-sec">Maßnahmen</div><ol class="diag-list">'+
+      obj.massnahmen.map(function(m){return '<li>'+esc(m)+'</li>';}).join('')+'</ol>';
+  }
+  if (obj.prognose) html += '<div class="diag-sec">Prognose</div><div class="diag-text">'+esc(obj.prognose)+'</div>';
+  html += '</div>';
+  box.innerHTML = html;
 }
 function parseMix(str) {
   if (!str||!str.trim()) return [];
