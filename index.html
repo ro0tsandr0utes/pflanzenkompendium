@@ -3484,6 +3484,79 @@ function renderCarePlan(plantName, obj, opts){
     '</div>';
 }
 
+// Uebernimmt KI-Vorschlaege aus einem Pflegeplan-Objekt in die Pflanze:
+// Intervalle, Duenger-Zuordnung, Dosis-Felder, Wachstumsmonate, saisonale
+// Events. Grundregel: nur leere Felder werden befuellt - User-Werte schlagen
+// KI-Werte, auch beim Refresh. Uebernommene Werte landen auch im payload.
+// Wird von getCare, bulkRefreshCare und refreshCarePlanInModal genutzt
+// (eine Logik fuer alle drei Pfade - Fix 7. Juli 2026: der Modal-Pfad hatte
+// vorher nur fertilizerId uebernommen, Intervalle/Dosis/Events gingen verloren).
+// Liefert {any, fert} fuer bedarfsgerechtes Re-Rendern.
+function adoptCareSuggestions(entry, obj, payload) {
+  var res = {any:false, fert:false};
+  var wSugg = parseInt(obj.wateringIntervalWeeks);
+  var fSugg = parseInt(obj.fertilizingIntervalWeeks);
+  if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
+    entry.wateringIntervalWeeks = String(wSugg);
+    payload.wateringIntervalWeeks = String(wSugg);
+    res.any = true;
+  }
+  // 0 ist ein gueltiger User-Wert ("nicht duengen") und wird nie ueberschrieben,
+  // deshalb echte Leer-Pruefung statt !parseInt. == null deckt auch undefined ab
+  // (lokales Objekt einer frisch angelegten Pflanze).
+  if (!isNaN(fSugg) && fSugg >= 0 && (entry.fertilizingIntervalWeeks == null || entry.fertilizingIntervalWeeks === '')) {
+    entry.fertilizingIntervalWeeks = String(fSugg);
+    payload.fertilizingIntervalWeeks = String(fSugg);
+    res.any = true;
+  }
+  if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
+    entry.fertilizerId = obj.fertilizerId;
+    payload.fertilizerId = obj.fertilizerId;
+    res.any = true;
+    res.fert = true;
+  }
+  // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
+  var validDoses = ['voll','halb','viertel','aussetzen'];
+  if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
+    entry.fertDoseGrowth = obj.fertDoseGrowth;
+    payload.fertDoseGrowth = obj.fertDoseGrowth;
+    res.any = true;
+  }
+  if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
+    entry.fertDoseDormant = obj.fertDoseDormant;
+    payload.fertDoseDormant = obj.fertDoseDormant;
+    res.any = true;
+  }
+  var gms = parseInt(obj.growthMonthStart);
+  var gme = parseInt(obj.growthMonthEnd);
+  if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
+    entry.growthMonthStart = String(gms);
+    payload.growthMonthStart = String(gms);
+    res.any = true;
+  }
+  if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
+    entry.growthMonthEnd = String(gme);
+    payload.growthMonthEnd = String(gme);
+    res.any = true;
+  }
+  // Saisonale Events nur uebernehmen wenn noch keine gesetzt sind
+  if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !String(entry.seasonalEvents).trim())) {
+    var validEvents = obj.seasonalEvents.filter(function(e){
+      return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+    }).map(function(e){
+      // Pipe und Doppelpunkt im Text neutralisieren, sonst zerlegt parseEvents falsch
+      return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
+    });
+    if (validEvents.length > 0) {
+      var serialized = serializeEvents(validEvents);
+      entry.seasonalEvents = serialized;
+      payload.seasonalEvents = serialized;
+      res.any = true;
+    }
+  }
+  return res;
+}
+
 function getCare(forceRefresh){
   var q=document.getElementById('care-q').value.trim(); if(!q) return;
   var box=document.getElementById('care-result');
@@ -3557,64 +3630,13 @@ function getCare(forceRefresh){
       entry.carePlanAt = nowIso;
       var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
 
-      // Intervalle nur uebernehmen wenn noch nichts gesetzt ist - User-Werte schlagen KI-Werte
-      var wSugg = parseInt(obj.wateringIntervalWeeks);
-      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
-      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
-        entry.wateringIntervalWeeks = String(wSugg);
-        payload.wateringIntervalWeeks = String(wSugg);
-      }
-      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
-        entry.fertilizingIntervalWeeks = String(fSugg);
-        payload.fertilizingIntervalWeeks = String(fSugg);
-      }
-
-      // fertilizerId nur uebernehmen wenn entry-Feld leer
-      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
-        entry.fertilizerId = obj.fertilizerId;
-        payload.fertilizerId = obj.fertilizerId;
-      }
-
-      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
-      var validDoses = ['voll','halb','viertel','aussetzen'];
-      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
-        entry.fertDoseGrowth = obj.fertDoseGrowth;
-        payload.fertDoseGrowth = obj.fertDoseGrowth;
-      }
-      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
-        entry.fertDoseDormant = obj.fertDoseDormant;
-        payload.fertDoseDormant = obj.fertDoseDormant;
-      }
-      var gms = parseInt(obj.growthMonthStart);
-      var gme = parseInt(obj.growthMonthEnd);
-      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
-        entry.growthMonthStart = String(gms);
-        payload.growthMonthStart = String(gms);
-      }
-      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
-        entry.growthMonthEnd = String(gme);
-        payload.growthMonthEnd = String(gme);
-      }
-
-      // Saisonale Events nur uebernehmen wenn noch keine gesetzt sind
-      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
-        var validEvents = obj.seasonalEvents.filter(function(e){
-          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
-        }).map(function(e){
-          // Pipe und Doppelpunkt im Text neutralisieren, sonst zerlegt parseEvents falsch
-          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
-        });
-        if (validEvents.length > 0) {
-          var serialized = serializeEvents(validEvents);
-          entry.seasonalEvents = serialized;
-          payload.seasonalEvents = serialized;
-        }
-      }
+      // KI-Vorschlaege (Intervalle, Duenger, Dosis, Events) in leere Felder uebernehmen
+      var adopted = adoptCareSuggestions(entry, obj, payload);
 
       apiFetch(payload).catch(function(){ toast('Pflegeplan konnte nicht gespeichert werden'); });
       renderCarePlan(entry.name, obj, {cachedAt: nowIso, canRefresh: true});
-      // Falls Intervalle oder Events gesetzt wurden, Sammlung re-rendern damit Badges/Banner erscheinen
-      if (payload.wateringIntervalWeeks || payload.fertilizingIntervalWeeks !== undefined || payload.seasonalEvents) {
+      // Falls Werte uebernommen wurden, Sammlung re-rendern damit Badges/Banner erscheinen
+      if (adopted.any) {
         renderBanner();
         renderGrid();
       }
@@ -3704,55 +3726,8 @@ function bulkRefreshCare() {
       entry.carePlanAt = nowIso;
       var payload = {action:'update', id:entry.id, carePlan:planJson, carePlanAt:nowIso};
 
-      var wSugg = parseInt(obj.wateringIntervalWeeks);
-      var fSugg = parseInt(obj.fertilizingIntervalWeeks);
-      if (wSugg > 0 && !parseInt(entry.wateringIntervalWeeks)) {
-        entry.wateringIntervalWeeks = String(wSugg);
-        payload.wateringIntervalWeeks = String(wSugg);
-      }
-      if (!isNaN(fSugg) && fSugg >= 0 && entry.fertilizingIntervalWeeks === '') {
-        entry.fertilizingIntervalWeeks = String(fSugg);
-        payload.fertilizingIntervalWeeks = String(fSugg);
-      }
-
-      if (obj.fertilizerId && !entry.fertilizerId && fertById(obj.fertilizerId)) {
-        entry.fertilizerId = obj.fertilizerId;
-        payload.fertilizerId = obj.fertilizerId;
-      }
-
-      // Dosis-Felder uebernehmen wenn noch keine gesetzt sind
-      var validDoses = ['voll','halb','viertel','aussetzen'];
-      if (obj.fertDoseGrowth && validDoses.indexOf(obj.fertDoseGrowth) >= 0 && !entry.fertDoseGrowth) {
-        entry.fertDoseGrowth = obj.fertDoseGrowth;
-        payload.fertDoseGrowth = obj.fertDoseGrowth;
-      }
-      if (obj.fertDoseDormant && validDoses.indexOf(obj.fertDoseDormant) >= 0 && !entry.fertDoseDormant) {
-        entry.fertDoseDormant = obj.fertDoseDormant;
-        payload.fertDoseDormant = obj.fertDoseDormant;
-      }
-      var gms = parseInt(obj.growthMonthStart);
-      var gme = parseInt(obj.growthMonthEnd);
-      if (gms >= 1 && gms <= 12 && !entry.growthMonthStart) {
-        entry.growthMonthStart = String(gms);
-        payload.growthMonthStart = String(gms);
-      }
-      if (gme >= 1 && gme <= 12 && !entry.growthMonthEnd) {
-        entry.growthMonthEnd = String(gme);
-        payload.growthMonthEnd = String(gme);
-      }
-
-      if (Array.isArray(obj.seasonalEvents) && obj.seasonalEvents.length > 0 && (!entry.seasonalEvents || !entry.seasonalEvents.trim())) {
-        var validEvents = obj.seasonalEvents.filter(function(e){
-          return e && e.date && e.text && /^\d{4}-\d{2}-\d{2}$/.test(e.date);
-        }).map(function(e){
-          return {date: e.date, text: String(e.text).replace(/\|/g,'/').replace(/:/g,' -')};
-        });
-        if (validEvents.length > 0) {
-          var serialized = serializeEvents(validEvents);
-          entry.seasonalEvents = serialized;
-          payload.seasonalEvents = serialized;
-        }
-      }
+      // KI-Vorschlaege in leere Felder uebernehmen (gemeinsame Logik, siehe adoptCareSuggestions)
+      adoptCareSuggestions(entry, obj, payload);
 
       apiFetch(payload).then(function(){ ok++; }).catch(function(){ fail++; }).then(function(){
         i++; setTimeout(next, 600);
@@ -4178,9 +4153,23 @@ function refreshCarePlanInModal() {
     '{"giessen":"...","duengen":"...","standort":"...","umtopfen":"...","rueckschnitt":"...","fehler":"...",'+
     '"wateringIntervalWeeks":N,"fertilizingIntervalWeeks":N,'+
     (availFerts.length>0 ? '"fertilizerId":"d1",' : '') +
+    '"fertDoseGrowth":"voll|halb|viertel|aussetzen","fertDoseDormant":"voll|halb|viertel|aussetzen",'+
+    '"growthMonthStart":N,"growthMonthEnd":N,'+
     '"seasonalEvents":[{"date":"YYYY-MM-DD","text":"Hinweis"}]}\n'+
-    '2-3 Saetze je Pflege-Feld auf Deutsch.'+
-    (availFerts.length>0 ? ' fertilizerId: ID eines passenden Duengers oder leer wenn keiner passt.' : '');
+    '2-3 Saetze je Pflege-Feld auf Deutsch. wateringIntervalWeeks und fertilizingIntervalWeeks: '+
+    'ganze Zahl in Wochen fuer den typischen Hausgebrauch in Mitteleuropa, Standard-Zimmerbedingungen. '+
+    'wateringIntervalWeeks ueblich 1-4. fertilizingIntervalWeeks ueblich 2-8 in der Wachstumsphase, '+
+    'oder 0 wenn die Pflanze typischerweise nicht geduengt werden sollte. '+
+    (availFerts.length>0 ? 'fertilizerId: ID eines passenden Duengers aus der Liste oben - leer lassen wenn keiner gut passt oder die Pflanze nicht geduengt werden soll. ' : '') +
+    'fertDoseGrowth/fertDoseDormant: Dosierung in Wachstumsphase bzw. Ruhephase. '+
+    'Werte: "voll" (volle Herstellerempfehlung), "halb" (50%), "viertel" (25%), "aussetzen" (komplett pausieren). '+
+    'Bei Pflanzen ohne Duengung beide leer lassen. '+
+    'growthMonthStart/growthMonthEnd: Monate (1-12) fuer die Wachstumsphase, alles ausserhalb ist Ruhephase. '+
+    'Beispiele: tropische Aroids ohne klare Ruhe = 1 bis 12. Sukkulenten = 4 bis 9. Orchideen oft 3 bis 10. '+
+    'seasonalEvents: 0-4 saisonale Pflege-Erinnerungen pro Jahr fuer diese Pflanze. '+
+    'Datumsangaben muessen in der Zukunft liegen ('+todayIso+' oder spaeter, im laufenden oder folgenden Jahr). '+
+    'text kurz und konkret ("Winterruhe einleiten - kuehl stellen, gießen halbieren"). '+
+    'Nur Events nennen die fuer DIESE Pflanze typisch sind - leeres Array wenn nichts saisonales relevant ist.';
 
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -4198,20 +4187,21 @@ function refreshCarePlanInModal() {
     p.carePlanAt = nowIso;
     var payload = {action:'update', id:p.id, carePlan:planJson, carePlanAt:nowIso};
 
-    // fertilizerId nur uebernehmen wenn entry-Feld leer (User-Wahl > KI)
-    var fertChanged = false;
-    if (obj.fertilizerId && !p.fertilizerId && fertById(obj.fertilizerId)) {
-      p.fertilizerId = obj.fertilizerId;
-      payload.fertilizerId = obj.fertilizerId;
-      fertChanged = true;
-    }
+    // KI-Vorschlaege (Intervalle, Duenger, Dosis, Events) in leere Felder
+    // uebernehmen - gleiche Logik wie getCare/Bulk. Fix 7. Juli 2026: vorher
+    // wurde hier nur fertilizerId uebernommen, Intervalle gingen verloren.
+    var adopted = adoptCareSuggestions(p, obj, payload);
 
     apiFetch(payload).catch(function(){
       toast('Pflegeplan konnte nicht gespeichert werden');
     });
     toast('Pflegeplan aktualisiert');
     renderDetailCare(p);
-    if (fertChanged) { renderGrid(); }
+    if (adopted.any) {
+      renderDetailInfo(p); // Details-Tab: Rhythmus- und Duenger-Sektion aktualisieren
+      renderBanner();
+      renderGrid();
+    }
   }).catch(function(err){
     showCareError('API-Fehler: '+(err.message||'Unbekannt'));
   });
