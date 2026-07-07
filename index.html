@@ -317,6 +317,17 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 }
 .detail-tab:hover { color: var(--text); }
 .detail-tab.on { color: var(--g2); border-bottom-color: var(--g2); font-weight: 500; }
+/* Pflegelog-Historie im Detail-Modal (Phase 5h) */
+.log-list { display: flex; flex-direction: column; }
+.log-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 8px 4px; border-bottom: 1px solid var(--border-l);
+  font-size: 13.5px;
+}
+.log-row:last-child { border-bottom: none; }
+.log-icon { flex: 0 0 auto; }
+.log-date { flex: 0 0 94px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.log-text { flex: 1; min-width: 0; }
 
 .detail-body {
   padding: 1.5rem 1.75rem 1.75rem;
@@ -967,10 +978,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="detail-tabs">
       <button class="detail-tab on" id="detail-tab-info" onclick="showDetailTab('info')">Details</button>
       <button class="detail-tab" id="detail-tab-care" onclick="showDetailTab('care')">Pflegeplan</button>
+      <button class="detail-tab" id="detail-tab-log" onclick="showDetailTab('log')">Historie</button>
     </div>
     <div class="detail-body">
       <div id="detail-panel-info"></div>
       <div id="detail-panel-care" style="display:none"></div>
+      <div id="detail-panel-log" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -2478,6 +2491,25 @@ function renderGrid() {
   }).join('');
 }
 
+// Pflegelog-Eintrag schreiben (Phase 5h). Fire-and-forget: das Log darf die
+// eigentliche Aktion nie blockieren oder mit Toasts vernebeln - Fehler
+// landen nur in der Konsole. Sheet-Spalte 'action' = Param 'logAction'
+// ('action' ist im Request durch das API-Routing belegt).
+function logCare(plantId, logAction, detail, dateIso) {
+  apiFetch({
+    action: 'addLog',
+    plantId: plantId,
+    scope: 'indoor',
+    logAction: logAction,
+    detail: detail || '',
+    date: dateIso || toIsoDate(new Date())
+  }).then(function(res) {
+    if (!res.ok) console.warn('Pflegelog-Eintrag fehlgeschlagen:', res.error);
+  }).catch(function(err) {
+    console.warn('Pflegelog-Eintrag fehlgeschlagen:', err && err.message);
+  });
+}
+
 // Quick-Action: Pflanze als gegossen/geduengt markieren
 function markCare(id, type) {
   var p = plants.find(function(x){return x.id===id;});
@@ -2509,6 +2541,19 @@ function markCare(id, type) {
     var label = type==='water' ? 'Gegossen' : (alsoWatered ? 'Gegossen & gedüngt' : 'Gedüngt');
     var snapped = daysBetween(snap, dayStart(new Date())) !== 0;
     toast(label + (snapped ? ' (auf '+fmtDate(snap)+' gerundet)' : ''));
+    // Pflegelog (Phase 5h): Duengen-Eintrag traegt Duenger-Name + aktuelle
+    // Dosis (= Duenger-Historie pro Pflanze), Giessen als eigener Eintrag.
+    if (type === 'water') {
+      logCare(id, 'water', '', iso);
+    } else {
+      var lf = fertById(p.fertilizerId);
+      var lDose = currentDoseLabel(p);
+      var lParts = [];
+      if (lf) lParts.push(lf.name);
+      if (lDose) lParts.push(doseShortLabel(lDose));
+      if (alsoWatered) lParts.push('inkl. Gießen');
+      logCare(id, 'fertilize', lParts.join(' · '), iso);
+    }
     renderBanner();
     renderGrid();
   }).catch(function(){
@@ -2529,6 +2574,7 @@ function markEventDone(plantId, eventDate) {
   }
   if (idx < 0) return;
   var prev = p.seasonalEvents;
+  var doneText = events[idx].text; // fuer Pflegelog, bevor das Datum verschoben wird
   var n = parseInt(events[idx].recurYears, 10) || 1;
   events[idx].date = addYears(events[idx].date, n);
   var newStr = serializeEvents(events);
@@ -2544,6 +2590,8 @@ function markEventDone(plantId, eventDate) {
       return;
     }
     toast(msgOk);
+    // Pflegelog (Phase 5h): erledigtes Event mit Original-Datum protokollieren
+    logCare(plantId, 'event', doneText, eventDate);
     renderBanner(); renderCalendarPanel();
   }).catch(function(){
     p.seasonalEvents = prev;
@@ -3843,8 +3891,11 @@ function openDetailModal(id) {
   // Zuruecksetzen auf Info-Tab
   document.getElementById('detail-tab-info').classList.add('on');
   document.getElementById('detail-tab-care').classList.remove('on');
+  document.getElementById('detail-tab-log').classList.remove('on');
   document.getElementById('detail-panel-info').style.display = '';
   document.getElementById('detail-panel-care').style.display = 'none';
+  document.getElementById('detail-panel-log').style.display = 'none';
+  detailLogLoaded = false; // Historie beim naechsten Tab-Klick frisch laden
   renderDetailModal();
   document.getElementById('detail-overlay').classList.remove('hidden');
 }
@@ -3857,8 +3908,49 @@ function closeDetailModal() {
 function showDetailTab(name) {
   document.getElementById('detail-tab-info').classList.toggle('on', name==='info');
   document.getElementById('detail-tab-care').classList.toggle('on', name==='care');
+  document.getElementById('detail-tab-log').classList.toggle('on', name==='log');
   document.getElementById('detail-panel-info').style.display = name==='info' ? '' : 'none';
   document.getElementById('detail-panel-care').style.display = name==='care' ? '' : 'none';
+  document.getElementById('detail-panel-log').style.display = name==='log' ? '' : 'none';
+  if (name==='log') renderDetailLog();
+}
+
+// Pflegelog-Tab (Phase 5h): lazy beim ersten Oeffnen laden, danach pro
+// Modal-Oeffnung gecached (openDetailModal setzt das Flag zurueck).
+var detailLogLoaded = false;
+function renderDetailLog() {
+  if (!detailPlantId) return;
+  if (detailLogLoaded) return;
+  var box = document.getElementById('detail-panel-log');
+  box.innerHTML = '<div class="empty" style="padding:2rem 1rem"><div class="spinner"></div></div>';
+  var pid = detailPlantId;
+  apiFetch({action:'getLog', plantId:pid, limit:100}).then(function(res) {
+    if (detailPlantId !== pid) return; // Modal wurde inzwischen gewechselt/geschlossen
+    if (!res.ok) {
+      box.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Historie konnte nicht geladen werden: '+esc(res.error||'?')+'</div>';
+      return;
+    }
+    detailLogLoaded = true;
+    var rows = res.data || [];
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty" style="padding:2rem 1rem">Noch keine Einträge.<br>'+
+        '<span style="font-size:12.5px;color:var(--muted)">Gießen, Düngen, Umtopfen und erledigte Events werden ab jetzt automatisch protokolliert.</span></div>';
+      return;
+    }
+    var icons = {water:'💧', fertilize:'🌱', repot:'🪴', event:'📌'};
+    var labels = {water:'Gegossen', fertilize:'Gedüngt', repot:'Umgetopft', event:'Erledigt'};
+    box.innerHTML = '<div class="log-list">' + rows.map(function(r) {
+      var dd = new Date(r.date);
+      var dTxt = r.date ? (isNaN(dd.getTime()) ? r.date : dd.toLocaleDateString('de-DE', {day:'2-digit', month:'short', year:'numeric'})) : '';
+      return '<div class="log-row">'+
+        '<span class="log-icon">'+(icons[r.action]||'•')+'</span>'+
+        '<span class="log-date">'+esc(dTxt)+'</span>'+
+        '<span class="log-text">'+esc(labels[r.action]||r.action)+(r.detail ? ' — '+esc(r.detail) : '')+'</span>'+
+      '</div>';
+    }).join('') + '</div>';
+  }).catch(function() {
+    box.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Verbindungsfehler.</div>';
+  });
 }
 
 function renderDetailModal() {
@@ -4396,6 +4488,12 @@ function saveRepot() {
       msg = 'Umgetopft - Düngepause ~' + weeksFwd + ' Wochen (Substrat enthält Nährstoffe)';
     }
     toast(msg);
+    // Pflegelog (Phase 5h): Umtopfen mit neuem Mix protokollieren
+    var lMixTxt = repotMixRows.filter(function(r){return r.pct>0;}).map(function(r){
+      var li = si(r.subId);
+      return r.pct + '% ' + (li >= 0 ? SUBS[li].name : r.subId);
+    }).join(', ');
+    logCare(p.id, 'repot', 'Neuer Mix: ' + lMixTxt, toIsoDate(new Date()));
     closeRepotModal();
     // Detail-Modal neu rendern
     renderDetailModal();
