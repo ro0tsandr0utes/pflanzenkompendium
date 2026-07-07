@@ -1965,6 +1965,31 @@ function subBg(idx) { return idx >= 0 ? BGS[idx % BGS.length] : '#eee'; }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// Robustes JSON-Extrahieren aus KI-Antworten (Hotfix R2):
+// 1) Code-Fences entfernen, 2) direkter Parse, 3) sonst auf das aeusserste
+// {...} bzw. [...] zuschneiden - faengt Antworten ab, bei denen das Modell
+// Text vor/nach dem JSON schreibt. Liefert das geparste Objekt/Array oder
+// null, wenn nichts parsebar ist (z.B. abgeschnittene Antwort bei max_tokens).
+function extractJson(raw) {
+  var s = String(raw || '').replace(/```json|```/g, '').trim();
+  if (!s) return null;
+  try { return JSON.parse(s); } catch(e) {}
+  var oa = s.indexOf('{'), oe = s.lastIndexOf('}');
+  var aa = s.indexOf('['), ae = s.lastIndexOf(']');
+  var tryObj = oa >= 0 && oe > oa;
+  var tryArr = aa >= 0 && ae > aa;
+  // Das zuerst oeffnende Klammerpaar bevorzugen
+  if (tryObj && (!tryArr || oa < aa)) {
+    try { return JSON.parse(s.slice(oa, oe + 1)); } catch(e) {}
+    if (tryArr) { try { return JSON.parse(s.slice(aa, ae + 1)); } catch(e) {} }
+    return null;
+  }
+  if (tryArr) {
+    try { return JSON.parse(s.slice(aa, ae + 1)); } catch(e) {}
+    if (tryObj) { try { return JSON.parse(s.slice(oa, oe + 1)); } catch(e) {} }
+  }
+  return null;
+}
 function parseMix(str) {
   if (!str||!str.trim()) return [];
   return str.split(',').map(function(s) {
@@ -2106,9 +2131,8 @@ function mixAiSuggest() {
   }).then(function(r){return r.json();}).then(function(data) {
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
-    var obj;
-    try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
-    catch(e){toast('KI-Antwort Fehler.');btn.disabled=false;btn.textContent='KI-Mischung vorschlagen';return;}
+    var obj=extractJson(raw);
+    if(!obj){toast('KI-Antwort Fehler.');btn.disabled=false;btn.textContent='KI-Mischung vorschlagen';return;}
     if (obj.mix&&Array.isArray(obj.mix)) {
       mixRows=obj.mix.filter(function(m){return SUBS.some(function(s){return s.id===m.id;});}).map(function(m){return {subId:m.id,pct:m.pct};});
       var sum=mixRows.reduce(function(a,r){return a+r.pct;},0);
@@ -2558,9 +2582,8 @@ function refreshFertText(plantId, onDone) {
   }).then(function(r){return r.json();}).then(function(data){
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { if (onDone) onDone(false); return; }
+    var obj = extractJson(raw);
+    if (!obj) { if (onDone) onDone(false); return; }
     if (!obj.duengen || typeof obj.duengen !== 'string') { if (onDone) onDone(false); return; }
 
     // Bestehenden carePlan-JSON parsen, nur duengen ersetzen, zurueckschreiben
@@ -3171,9 +3194,8 @@ function reassignFromDeletedFert(deletedId, candidates) {
   }).then(function(r){return r.json();}).then(function(data) {
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { toast('KI-Antwort ungültig — Umordnung abgebrochen.'); return; }
+    var obj = extractJson(raw);
+    if (!obj) { toast('KI-Antwort ungültig — Umordnung abgebrochen.'); return; }
 
     if (!obj.assignments || !Array.isArray(obj.assignments)) {
       toast('KI-Antwort ungültig — Umordnung abgebrochen.'); return;
@@ -3472,13 +3494,12 @@ function getCare(forceRefresh){
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     var raw=data.content&&data.content.find(function(b){return b.type==='text';});
     raw=raw?raw.text:'{}';
-    var obj;
-    try{obj=JSON.parse(raw.replace(/```json|```/g,'').trim());}
-    catch(e){box.innerHTML='<div style="color:var(--danger);font-size:14px">Antwort konnte nicht verarbeitet werden.</div>';return;}
+    var obj=extractJson(raw);
+    if(!obj){box.innerHTML='<div style="color:var(--danger);font-size:14px">Antwort konnte nicht verarbeitet werden.</div>';return;}
 
     // Wenn Pflanze in Sammlung: Cache ins Sheet zurueckschreiben
     if (entry) {
@@ -3622,13 +3643,12 @@ function bulkRefreshCare() {
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
     }).then(function(r){return r.json();}).then(function(data){
       var raw = data.content && data.content.find(function(b){return b.type==='text';});
       raw = raw ? raw.text : '{}';
-      var obj;
-      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-      catch(e) { fail++; i++; setTimeout(next, 600); return; }
+      var obj = extractJson(raw);
+      if (!obj) { fail++; i++; setTimeout(next, 600); return; }
 
       var planJson = JSON.stringify(obj);
       var nowIso = new Date().toISOString();
@@ -3762,16 +3782,15 @@ function bulkRefreshOutdoorCare() {
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
     }).then(function(r){return r.json();}).then(function(data){
       if (!data.content || !Array.isArray(data.content)) {
         fail++; i++; setTimeout(next, 600); return;
       }
       var raw = data.content.find(function(b){return b.type==='text';});
       raw = raw ? raw.text : '{}';
-      var obj;
-      try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-      catch(e) { fail++; i++; setTimeout(next, 600); return; }
+      var obj = extractJson(raw);
+      if (!obj) { fail++; i++; setTimeout(next, 600); return; }
 
       var carePlanStr = JSON.stringify({
         standort: obj.standort || '',
@@ -4074,13 +4093,12 @@ function refreshCarePlanInModal() {
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:'Zimmerpflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { showCareError('Antwort konnte nicht verarbeitet werden.'); return; }
+    var obj = extractJson(raw);
+    if (!obj) { showCareError('Antwort konnte nicht verarbeitet werden.'); return; }
 
     var planJson = JSON.stringify(obj);
     var nowIso = new Date().toISOString();
@@ -4288,10 +4306,9 @@ function fetchRepotSuggestion(p) {
     }
     var raw = data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) {
-      console.warn('Repot-AI JSON-Parse-Fehler:', e.message, '\nRaw:', raw, '\nFull:', data);
+    var obj = extractJson(raw);
+    if (!obj) {
+      console.warn('Repot-AI JSON-Parse-Fehler. Raw:', raw, '\nFull:', data);
       toast('Antwort-Format kaputt - siehe Browser-Konsole');
       if(btn){btn.disabled=false; btn.textContent='✦ KI-Mischung neu vorschlagen';}
       return;
@@ -4496,9 +4513,8 @@ function requestFertAssignment(fertId) {
   }).then(function(r){return r.json();}).then(function(data) {
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) { showFertAssignError('KI-Antwort konnte nicht verarbeitet werden.'); return; }
+    var obj = extractJson(raw);
+    if (!obj) { showFertAssignError('KI-Antwort konnte nicht verarbeitet werden.'); return; }
 
     if (!obj.assignments || !Array.isArray(obj.assignments) || obj.assignments.length === 0) {
       showFertAssignEmpty(f);
@@ -5335,10 +5351,9 @@ function generateZoneCarePlan() {
     }
     var raw = data.content.find(function(b){return b.type === 'text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) {
-      console.warn('Zone-CarePlan JSON-Parse-Fehler:', e.message, '\nRaw:', raw);
+    var obj = extractJson(raw);
+    if (!obj) {
+      console.warn('Zone-CarePlan JSON-Parse-Fehler. Raw:', raw);
       box.innerHTML = '<div style="color:var(--danger);padding:1rem">Antwort-Format kaputt - siehe Browser-Konsole</div>';
       return;
     }
@@ -5719,9 +5734,8 @@ function runCircuitScheduleSuggestion(idVal) {
     btn.innerHTML = btnLabel;
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch (e) {
+    var obj = extractJson(raw);
+    if (!obj) {
       box.innerHTML = '<div class="zone-suggest-err">KI-Antwort konnte nicht verarbeitet werden.</div>';
       return;
     }
@@ -7136,9 +7150,8 @@ function suggestOutdoorZone() {
     btn.textContent = '💡 Bereich vorschlagen';
     var raw = data.content && data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) {
+    var obj = extractJson(raw);
+    if (!obj) {
       box.innerHTML = '<div class="zone-suggest-err">KI-Antwort konnte nicht verarbeitet werden.</div>';
       return;
     }
@@ -7575,7 +7588,7 @@ function generateOutdoorCarePlan(invalidateOnly) {
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:'Garten-/Outdoor-Pflanzenexperte. Nur valides JSON, keine Backticks.',messages:[{role:'user',content:prompt}]})
   }).then(function(r){return r.json();}).then(function(data){
     if (!data.content || !Array.isArray(data.content)) {
       console.warn('Outdoor-CarePlan API-Fehler:', data);
@@ -7585,10 +7598,9 @@ function generateOutdoorCarePlan(invalidateOnly) {
     }
     var raw = data.content.find(function(b){return b.type==='text';});
     raw = raw ? raw.text : '{}';
-    var obj;
-    try { obj = JSON.parse(raw.replace(/```json|```/g,'').trim()); }
-    catch(e) {
-      console.warn('Outdoor-CarePlan JSON-Parse-Fehler:', e.message, '\nRaw:', raw);
+    var obj = extractJson(raw);
+    if (!obj) {
+      console.warn('Outdoor-CarePlan JSON-Parse-Fehler. Raw:', raw);
       box.innerHTML = '<div style="color:var(--danger);padding:1rem">Antwort-Format kaputt - siehe Browser-Konsole</div>';
       return;
     }
