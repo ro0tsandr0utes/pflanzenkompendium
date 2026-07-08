@@ -1395,7 +1395,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 
   <div id="panel-kalender" class="panel">
     <div id="cal-content"></div>
-    <div id="cal-empty" class="empty" style="display:none">Keine anstehenden Events. Trage saisonale Hinweise pro Pflanze über das Details-Modal (Pflegeplan generieren) oder direkt im Sheet ein.</div>
+    <div id="cal-empty" class="empty" style="display:none">Keine Aufgaben und keine anstehenden Events — alles versorgt. 🎉<br><span style="font-size:12.5px;color:var(--muted)">Fällige Pflege erscheint hier automatisch. Saisonale Hinweise entstehen über das Details-Modal (Pflegeplan generieren) oder direkt im Sheet.</span></div>
   </div>
 
   <div id="panel-substrate" class="panel">
@@ -1668,7 +1668,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 // Build-Kennung: wird im Einstellungs-Modal angezeigt und beim Start in die
 // Konsole geloggt. Bei jeder Auslieferung hochzaehlen - damit ist sofort
 // pruefbar, ob Browser/Handy wirklich den neuen Stand geladen haben.
-var PFK_BUILD = '2026-07-07 RF2.1';
+var PFK_BUILD = '2026-07-08 KJ1.1';
 
 var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C1D','#686860'];
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
@@ -2446,8 +2446,76 @@ function renderCalendarPanel() {
   var box = document.getElementById('cal-content');
   var empty = document.getElementById('cal-empty');
   var events = upcomingEvents(12, true); // inkl. aktive
-  if (!events.length) { box.innerHTML=''; empty.style.display='block'; return; }
+
+  // Aufgaben-Sektionen (Phase K1): faellige und demnaechst faellige Pflege
+  // zusaetzlich zu den saisonalen Events - der Kalender wird damit zur
+  // kombinierten "Was ist zu tun"-Ansicht.
+  var todayD = dayStart(new Date());
+  var dueNow = [], soon = [];
+  plants.forEach(function(p){
+    ['water','fertilize'].forEach(function(type){
+      var s = dueStatus(p, type);
+      if (!s.tracked) return;
+      if (s.due) {
+        dueNow.push({p:p, type:type, s:s});
+      } else if (s.dueDate) {
+        var d = daysBetween(s.dueDate, todayD); // Tage bis faellig
+        if (d > 0 && d <= 14) soon.push({p:p, type:type, s:s, days:d});
+      }
+    });
+  });
+  // Ueberfaellige zuerst (am laengsten ueberfaellig oben), dann normale faellige
+  dueNow.sort(function(a,b){ return b.s.weeksOverdue - a.s.weeksOverdue; });
+  soon.sort(function(a,b){ return a.days - b.days; });
+
+  if (!events.length && !dueNow.length && !soon.length) {
+    box.innerHTML=''; empty.style.display='block'; return;
+  }
   empty.style.display='none';
+
+  function taskRow(item, withAction) {
+    var p = item.p, type = item.type, s = item.s;
+    var icon = type === 'water' ? '💧' : '🌱';
+    var statusTxt;
+    if (withAction) {
+      statusTxt = s.overdue
+        ? 'überfällig seit ' + s.weeksOverdue + (s.weeksOverdue === 1 ? ' Woche' : ' Wochen')
+        : 'diese Woche fällig';
+    } else {
+      statusTxt = 'in ' + item.days + (item.days === 1 ? ' Tag' : ' Tagen') +
+        (s.dueDate ? ' (' + s.dueDate.toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'2-digit'}) + ')' : '');
+    }
+    var roomTxt = p.room ? ' <span style="color:var(--muted);font-weight:400;font-size:12px">📍 '+esc(p.room)+'</span>' : '';
+    var btn = '';
+    if (withAction) {
+      var btnLabel = type === 'water' ? '💧 Gegossen' : '🌱 Gedüngt';
+      var btnCls = type === 'water' ? 'quick-btn' : 'quick-btn fert';
+      btn = '<button class="'+btnCls+'" onclick="markCare(\''+p.id+'\',\''+type+'\')">'+btnLabel+'</button>';
+    }
+    return '<div class="cal-row'+(withAction && s.overdue ? ' active' : '')+'">'+
+      '<span class="cal-day">'+icon+'</span>'+
+      '<div class="cal-text">'+
+        '<strong>'+esc(p.name)+'</strong>'+roomTxt+
+        '<div class="cal-event-text">'+esc(statusTxt)+'</div>'+
+      '</div>'+
+      btn+
+    '</div>';
+  }
+
+  var taskHtml = '';
+  if (dueNow.length) {
+    taskHtml += '<div class="cal-month"><h3 class="cal-month-label">Jetzt fällig ('+dueNow.length+')</h3>'+
+      dueNow.map(function(it){ return taskRow(it, true); }).join('')+'</div>';
+  }
+  if (soon.length) {
+    taskHtml += '<div class="cal-month"><h3 class="cal-month-label">Nächste 14 Tage ('+soon.length+')</h3>'+
+      soon.map(function(it){ return taskRow(it, false); }).join('')+'</div>';
+  }
+
+  if (!events.length) {
+    box.innerHTML = taskHtml;
+    return;
+  }
 
   // Gruppieren nach Jahr-Monat
   var groups = {};
@@ -2466,7 +2534,7 @@ function renderCalendarPanel() {
   var thisWeekStart = lastWednesday(today);
   var thisWeekEnd = nextWednesday(today);
 
-  box.innerHTML = monthOrder.map(function(key){
+  box.innerHTML = taskHtml + '<div class="cal-month"><h3 class="cal-month-label" style="margin-top:.25rem">Saisonale Events</h3></div>' + monthOrder.map(function(key){
     var g = groups[key];
     var rows = g.items.map(function(e){
       var isActive = daysBetween(e.dateObj, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, e.dateObj) > 0;
@@ -2873,6 +2941,7 @@ function markCare(id, type) {
     }
     renderBanner();
     renderGrid();
+    renderCalendarPanel(); // Aufgaben-Sektion im Kalender-Tab (Phase K1)
   }).catch(function(){
     p[field] = prev;
     if (alsoWatered) p.lastWatered = prevWater;
@@ -4197,6 +4266,7 @@ function openDetailModal(id) {
   document.getElementById('detail-panel-care').style.display = 'none';
   document.getElementById('detail-panel-log').style.display = 'none';
   detailLogLoaded = false; // Historie beim naechsten Tab-Klick frisch laden
+  document.getElementById('detail-panel-log').innerHTML = ''; // Header+Journal-Form je Pflanze neu
   renderDetailModal();
   document.getElementById('detail-overlay').classList.remove('hidden');
 }
@@ -4218,39 +4288,150 @@ function showDetailTab(name) {
 
 // Pflegelog-Tab (Phase 5h): lazy beim ersten Oeffnen laden, danach pro
 // Modal-Oeffnung gecached (openDetailModal setzt das Flag zurueck).
+// Phase J1: Kopfzeile mit Foto-Upload (Journal), Fotos liegen in Drive und
+// werden pro Eintrag erst auf Klick nachgeladen.
 var detailLogLoaded = false;
+var journalState = {file:null, b64:null};
+
+function detailLogHeaderHtml() {
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">'+
+    '<span style="flex:1;font-size:12.5px;color:var(--muted)">Automatisch protokolliert: Gießen, Düngen, Umtopfen, Events.</span>'+
+    '<button class="btn" type="button" onclick="document.getElementById(\'journal-photo\').click()">📷 Foto hinzufügen</button>'+
+    '<input type="file" id="journal-photo" accept="image/*" style="display:none" onchange="journalPhotoChosen(this)" />'+
+  '</div>'+
+  '<div id="journal-form" style="display:none;margin-bottom:.75rem;padding:.75rem;background:var(--gl);border-radius:10px">'+
+    '<div id="journal-preview" style="margin-bottom:.5rem"></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<input class="form-input" id="journal-note" placeholder="Optional: Notiz zum Foto (z.B. Neuaustrieb am Stamm)" style="flex:1;min-width:180px" />'+
+      '<button class="btn primary" id="journal-save-btn" onclick="saveJournalPhoto()">Speichern</button>'+
+      '<button class="btn" type="button" onclick="cancelJournalPhoto()">Abbrechen</button>'+
+    '</div>'+
+  '</div>'+
+  '<div id="detail-log-list"></div>';
+}
+
+function journalPhotoChosen(input) {
+  var file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  journalState.file = file;
+  journalState.b64 = null;
+  var form = document.getElementById('journal-form');
+  var prev = document.getElementById('journal-preview');
+  form.style.display = 'block';
+  prev.innerHTML = '<div class="spinner"></div>';
+  // Journal-Fotos etwas kleiner skalieren (1280px) - reicht fuers Journal
+  // und haelt Drive-Ablage und POST-Payload schlank
+  readImageAsJpegBase64(file, 1280, function(err, b64) {
+    if (err) { prev.innerHTML = '<span style="color:var(--danger);font-size:13px">'+esc(err.message)+'</span>'; return; }
+    journalState.b64 = b64;
+    prev.innerHTML = '<img src="data:image/jpeg;base64,'+b64+'" alt="Foto-Vorschau" style="max-height:150px;max-width:100%;border-radius:8px;border:1px solid var(--border)" />';
+  });
+}
+
+function cancelJournalPhoto() {
+  journalState = {file:null, b64:null};
+  var form = document.getElementById('journal-form');
+  if (form) { form.style.display = 'none'; document.getElementById('journal-preview').innerHTML = ''; document.getElementById('journal-note').value = ''; }
+}
+
+function saveJournalPhoto() {
+  if (!journalState.b64) { toast('Foto wird noch verarbeitet…'); return; }
+  if (!detailPlantId) return;
+  var btn = document.getElementById('journal-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Speichert…';
+  var note = document.getElementById('journal-note').value.trim();
+  apiFetch({
+    action: 'addLog',
+    plantId: detailPlantId,
+    scope: 'indoor',
+    logAction: 'photo',
+    detail: note,
+    date: toIsoDate(new Date()),
+    photo: journalState.b64
+  }).then(function(res) {
+    btn.disabled = false;
+    btn.textContent = 'Speichern';
+    if (!res.ok) { toast('Foto konnte nicht gespeichert werden: '+(res.error||'?')); return; }
+    toast('Foto im Journal gespeichert');
+    cancelJournalPhoto();
+    detailLogLoaded = false;
+    renderDetailLog(); // Liste inkl. neuem Eintrag frisch laden
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'Speichern';
+    toast('Verbindungsfehler');
+  });
+}
+
+// Journal-Foto eines Log-Eintrags nachladen (Klick auf "Foto anzeigen")
+function loadLogPhoto(photoId, btnId) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Lädt…';
+  apiFetch({action:'getLogPhoto', photoId:photoId}).then(function(res) {
+    if (!res.ok || !res.data || !res.data.data) {
+      btn.disabled = false;
+      btn.textContent = 'Foto anzeigen';
+      toast('Foto konnte nicht geladen werden'+(res.error ? ': '+res.error : ''));
+      return;
+    }
+    var img = document.createElement('img');
+    img.src = 'data:'+(res.data.mime||'image/jpeg')+';base64,'+res.data.data;
+    img.alt = 'Journal-Foto';
+    img.style.cssText = 'max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--border);display:block;margin-top:6px';
+    btn.parentNode.replaceChild(img, btn);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'Foto anzeigen';
+    toast('Verbindungsfehler');
+  });
+}
+
 function renderDetailLog() {
   if (!detailPlantId) return;
   if (detailLogLoaded) return;
   var box = document.getElementById('detail-panel-log');
-  box.innerHTML = '<div class="empty" style="padding:2rem 1rem"><div class="spinner"></div></div>';
+  if (!box.querySelector('#detail-log-list')) {
+    box.innerHTML = detailLogHeaderHtml();
+    cancelJournalPhoto();
+  }
+  var list = box.querySelector('#detail-log-list');
+  list.innerHTML = '<div class="empty" style="padding:2rem 1rem"><div class="spinner"></div></div>';
   var pid = detailPlantId;
   apiFetch({action:'getLog', plantId:pid, limit:100}).then(function(res) {
     if (detailPlantId !== pid) return; // Modal wurde inzwischen gewechselt/geschlossen
     if (!res.ok) {
-      box.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Historie konnte nicht geladen werden: '+esc(res.error||'?')+'</div>';
+      list.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Historie konnte nicht geladen werden: '+esc(res.error||'?')+'</div>';
       return;
     }
     detailLogLoaded = true;
     var rows = res.data || [];
     if (!rows.length) {
-      box.innerHTML = '<div class="empty" style="padding:2rem 1rem">Noch keine Einträge.<br>'+
-        '<span style="font-size:12.5px;color:var(--muted)">Gießen, Düngen, Umtopfen und erledigte Events werden ab jetzt automatisch protokolliert.</span></div>';
+      list.innerHTML = '<div class="empty" style="padding:2rem 1rem">Noch keine Einträge.<br>'+
+        '<span style="font-size:12.5px;color:var(--muted)">Gießen, Düngen, Umtopfen und erledigte Events werden automatisch protokolliert — Fotos kannst du oben ergänzen.</span></div>';
       return;
     }
-    var icons = {water:'💧', fertilize:'🌱', repot:'🪴', event:'📌'};
-    var labels = {water:'Gegossen', fertilize:'Gedüngt', repot:'Umgetopft', event:'Erledigt'};
-    box.innerHTML = '<div class="log-list">' + rows.map(function(r) {
+    var icons = {water:'💧', fertilize:'🌱', repot:'🪴', event:'📌', photo:'📷'};
+    var labels = {water:'Gegossen', fertilize:'Gedüngt', repot:'Umgetopft', event:'Erledigt', photo:'Foto'};
+    list.innerHTML = '<div class="log-list">' + rows.map(function(r, i) {
       var dd = new Date(r.date);
       var dTxt = r.date ? (isNaN(dd.getTime()) ? r.date : dd.toLocaleDateString('de-DE', {day:'2-digit', month:'short', year:'numeric'})) : '';
+      var photoPart = '';
+      if (r.photoId) {
+        var bid = 'logphoto-btn-'+i;
+        photoPart = '<div><button class="act-btn" id="'+bid+'" onclick="loadLogPhoto(\''+esc(r.photoId)+'\',\''+bid+'\')">Foto anzeigen</button></div>';
+      }
       return '<div class="log-row">'+
         '<span class="log-icon">'+(icons[r.action]||'•')+'</span>'+
         '<span class="log-date">'+esc(dTxt)+'</span>'+
-        '<span class="log-text">'+esc(labels[r.action]||r.action)+(r.detail ? ' — '+esc(r.detail) : '')+'</span>'+
+        '<span class="log-text">'+esc(labels[r.action]||r.action)+(r.detail ? ' — '+esc(r.detail) : '')+photoPart+'</span>'+
       '</div>';
     }).join('') + '</div>';
   }).catch(function() {
-    box.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Verbindungsfehler.</div>';
+    list.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Verbindungsfehler.</div>';
   });
 }
 
