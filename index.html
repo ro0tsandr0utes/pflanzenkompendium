@@ -1056,10 +1056,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
     <div class="detail-tabs">
       <button class="detail-tab on" id="op-detail-tab-info" onclick="showOutdoorDetailTab('info')">Details</button>
       <button class="detail-tab" id="op-detail-tab-care" onclick="showOutdoorDetailTab('care')">Pflegeplan</button>
+      <button class="detail-tab" id="op-detail-tab-log" onclick="showOutdoorDetailTab('log')">Historie</button>
     </div>
     <div class="detail-body">
       <div id="op-detail-panel-info"></div>
       <div id="op-detail-panel-care" style="display:none"></div>
+      <div id="op-detail-panel-log" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -1668,7 +1670,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 // Build-Kennung: wird im Einstellungs-Modal angezeigt und beim Start in die
 // Konsole geloggt. Bei jeder Auslieferung hochzaehlen - damit ist sofort
 // pruefbar, ob Browser/Handy wirklich den neuen Stand geladen haben.
-var PFK_BUILD = '2026-07-08 KJ1.1';
+var PFK_BUILD = '2026-07-08 J2.1';
 
 var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C1D','#686860'];
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
@@ -2880,11 +2882,11 @@ function renderGrid() {
 // eigentliche Aktion nie blockieren oder mit Toasts vernebeln - Fehler
 // landen nur in der Konsole. Sheet-Spalte 'action' = Param 'logAction'
 // ('action' ist im Request durch das API-Routing belegt).
-function logCare(plantId, logAction, detail, dateIso) {
+function logCare(plantId, logAction, detail, dateIso, scope) {
   apiFetch({
     action: 'addLog',
     plantId: plantId,
-    scope: 'indoor',
+    scope: scope || 'indoor',
     logAction: logAction,
     detail: detail || '',
     date: dateIso || toIsoDate(new Date())
@@ -4265,7 +4267,7 @@ function openDetailModal(id) {
   document.getElementById('detail-panel-info').style.display = '';
   document.getElementById('detail-panel-care').style.display = 'none';
   document.getElementById('detail-panel-log').style.display = 'none';
-  detailLogLoaded = false; // Historie beim naechsten Tab-Klick frisch laden
+  journalCtx.indoor.loaded = false; // Historie beim naechsten Tab-Klick frisch laden
   document.getElementById('detail-panel-log').innerHTML = ''; // Header+Journal-Form je Pflanze neu
   renderDetailModal();
   document.getElementById('detail-overlay').classList.remove('hidden');
@@ -4286,78 +4288,100 @@ function showDetailTab(name) {
   if (name==='log') renderDetailLog();
 }
 
-// Pflegelog-Tab (Phase 5h): lazy beim ersten Oeffnen laden, danach pro
-// Modal-Oeffnung gecached (openDetailModal setzt das Flag zurueck).
-// Phase J1: Kopfzeile mit Foto-Upload (Journal), Fotos liegen in Drive und
-// werden pro Eintrag erst auf Klick nachgeladen.
-var detailLogLoaded = false;
-var journalState = {file:null, b64:null};
+// Pflegelog-Tab (Phase 5h/J1/J2): lazy beim ersten Oeffnen laden, danach pro
+// Modal-Oeffnung gecached (die open*DetailModal-Funktionen setzen zurueck).
+// Journal-Fotos liegen in Drive und werden pro Eintrag erst auf Klick geladen.
+// Phase J2: parametrisiert fuer Indoor ('indoor') und Outdoor ('outdoor') -
+// gleiche Logik, getrennte Panels/IDs/State, scope wandert mit ins Log.
+var journalCtx = {
+  indoor:  {panel:'detail-panel-log',    prefix:'journal',  loaded:false, state:{file:null, b64:null}},
+  outdoor: {panel:'op-detail-panel-log', prefix:'ojournal', loaded:false, state:{file:null, b64:null}}
+};
 
-function detailLogHeaderHtml() {
-  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">'+
-    '<span style="flex:1;font-size:12.5px;color:var(--muted)">Automatisch protokolliert: Gießen, Düngen, Umtopfen, Events.</span>'+
-    '<button class="btn" type="button" onclick="document.getElementById(\'journal-photo\').click()">📷 Foto hinzufügen</button>'+
-    '<input type="file" id="journal-photo" accept="image/*" style="display:none" onchange="journalPhotoChosen(this)" />'+
-  '</div>'+
-  '<div id="journal-form" style="display:none;margin-bottom:.75rem;padding:.75rem;background:var(--gl);border-radius:10px">'+
-    '<div id="journal-preview" style="margin-bottom:.5rem"></div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-      '<input class="form-input" id="journal-note" placeholder="Optional: Notiz zum Foto (z.B. Neuaustrieb am Stamm)" style="flex:1;min-width:180px" />'+
-      '<button class="btn primary" id="journal-save-btn" onclick="saveJournalPhoto()">Speichern</button>'+
-      '<button class="btn" type="button" onclick="cancelJournalPhoto()">Abbrechen</button>'+
-    '</div>'+
-  '</div>'+
-  '<div id="detail-log-list"></div>';
+function journalPlantId(scope) {
+  return scope === 'outdoor' ? outdoorDetailId : detailPlantId;
 }
 
-function journalPhotoChosen(input) {
+function detailLogHeaderHtml(scope) {
+  var c = journalCtx[scope];
+  var autoTxt = scope === 'outdoor'
+    ? 'Automatisch protokolliert: erledigte Events.'
+    : 'Automatisch protokolliert: Gießen, Düngen, Umtopfen, Events.';
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">'+
+    '<span style="flex:1;font-size:12.5px;color:var(--muted)">'+autoTxt+'</span>'+
+    '<button class="btn" type="button" onclick="document.getElementById(\''+c.prefix+'-photo\').click()">📷 Foto hinzufügen</button>'+
+    '<input type="file" id="'+c.prefix+'-photo" accept="image/*" style="display:none" onchange="journalPhotoChosen(this,\''+scope+'\')" />'+
+  '</div>'+
+  '<div id="'+c.prefix+'-form" style="display:none;margin-bottom:.75rem;padding:.75rem;background:var(--gl);border-radius:10px">'+
+    '<div id="'+c.prefix+'-preview" style="margin-bottom:.5rem"></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<input class="form-input" id="'+c.prefix+'-note" placeholder="Optional: Notiz zum Foto (z.B. Neuaustrieb am Stamm)" style="flex:1;min-width:180px" />'+
+      '<button class="btn primary" id="'+c.prefix+'-save-btn" onclick="saveJournalPhoto(\''+scope+'\')">Speichern</button>'+
+      '<button class="btn" type="button" onclick="cancelJournalPhoto(\''+scope+'\')">Abbrechen</button>'+
+    '</div>'+
+  '</div>'+
+  '<div id="'+c.prefix+'-log-list"></div>';
+}
+
+function journalPhotoChosen(input, scope) {
+  scope = scope || 'indoor';
+  var c = journalCtx[scope];
   var file = input.files && input.files[0];
   input.value = '';
   if (!file) return;
-  journalState.file = file;
-  journalState.b64 = null;
-  var form = document.getElementById('journal-form');
-  var prev = document.getElementById('journal-preview');
+  c.state.file = file;
+  c.state.b64 = null;
+  var form = document.getElementById(c.prefix+'-form');
+  var prev = document.getElementById(c.prefix+'-preview');
   form.style.display = 'block';
   prev.innerHTML = '<div class="spinner"></div>';
   // Journal-Fotos etwas kleiner skalieren (1280px) - reicht fuers Journal
   // und haelt Drive-Ablage und POST-Payload schlank
   readImageAsJpegBase64(file, 1280, function(err, b64) {
     if (err) { prev.innerHTML = '<span style="color:var(--danger);font-size:13px">'+esc(err.message)+'</span>'; return; }
-    journalState.b64 = b64;
+    c.state.b64 = b64;
     prev.innerHTML = '<img src="data:image/jpeg;base64,'+b64+'" alt="Foto-Vorschau" style="max-height:150px;max-width:100%;border-radius:8px;border:1px solid var(--border)" />';
   });
 }
 
-function cancelJournalPhoto() {
-  journalState = {file:null, b64:null};
-  var form = document.getElementById('journal-form');
-  if (form) { form.style.display = 'none'; document.getElementById('journal-preview').innerHTML = ''; document.getElementById('journal-note').value = ''; }
+function cancelJournalPhoto(scope) {
+  scope = scope || 'indoor';
+  var c = journalCtx[scope];
+  c.state = {file:null, b64:null};
+  var form = document.getElementById(c.prefix+'-form');
+  if (form) {
+    form.style.display = 'none';
+    document.getElementById(c.prefix+'-preview').innerHTML = '';
+    document.getElementById(c.prefix+'-note').value = '';
+  }
 }
 
-function saveJournalPhoto() {
-  if (!journalState.b64) { toast('Foto wird noch verarbeitet…'); return; }
-  if (!detailPlantId) return;
-  var btn = document.getElementById('journal-save-btn');
+function saveJournalPhoto(scope) {
+  scope = scope || 'indoor';
+  var c = journalCtx[scope];
+  var pid = journalPlantId(scope);
+  if (!c.state.b64) { toast('Foto wird noch verarbeitet…'); return; }
+  if (!pid) return;
+  var btn = document.getElementById(c.prefix+'-save-btn');
   btn.disabled = true;
   btn.textContent = 'Speichert…';
-  var note = document.getElementById('journal-note').value.trim();
+  var note = document.getElementById(c.prefix+'-note').value.trim();
   apiFetch({
     action: 'addLog',
-    plantId: detailPlantId,
-    scope: 'indoor',
+    plantId: pid,
+    scope: scope,
     logAction: 'photo',
     detail: note,
     date: toIsoDate(new Date()),
-    photo: journalState.b64
+    photo: c.state.b64
   }).then(function(res) {
     btn.disabled = false;
     btn.textContent = 'Speichern';
     if (!res.ok) { toast('Foto konnte nicht gespeichert werden: '+(res.error||'?')); return; }
     toast('Foto im Journal gespeichert');
-    cancelJournalPhoto();
-    detailLogLoaded = false;
-    renderDetailLog(); // Liste inkl. neuem Eintrag frisch laden
+    cancelJournalPhoto(scope);
+    c.loaded = false;
+    renderDetailLog(scope); // Liste inkl. neuem Eintrag frisch laden
   }).catch(function() {
     btn.disabled = false;
     btn.textContent = 'Speichern';
@@ -4390,28 +4414,33 @@ function loadLogPhoto(photoId, btnId) {
   });
 }
 
-function renderDetailLog() {
-  if (!detailPlantId) return;
-  if (detailLogLoaded) return;
-  var box = document.getElementById('detail-panel-log');
-  if (!box.querySelector('#detail-log-list')) {
-    box.innerHTML = detailLogHeaderHtml();
-    cancelJournalPhoto();
+function renderDetailLog(scope) {
+  scope = scope || 'indoor';
+  var c = journalCtx[scope];
+  var pid = journalPlantId(scope);
+  if (!pid) return;
+  if (c.loaded) return;
+  var box = document.getElementById(c.panel);
+  if (!box.querySelector('#'+c.prefix+'-log-list')) {
+    box.innerHTML = detailLogHeaderHtml(scope);
+    cancelJournalPhoto(scope);
   }
-  var list = box.querySelector('#detail-log-list');
+  var list = box.querySelector('#'+c.prefix+'-log-list');
   list.innerHTML = '<div class="empty" style="padding:2rem 1rem"><div class="spinner"></div></div>';
-  var pid = detailPlantId;
   apiFetch({action:'getLog', plantId:pid, limit:100}).then(function(res) {
-    if (detailPlantId !== pid) return; // Modal wurde inzwischen gewechselt/geschlossen
+    if (journalPlantId(scope) !== pid) return; // Modal wurde inzwischen gewechselt/geschlossen
     if (!res.ok) {
       list.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Historie konnte nicht geladen werden: '+esc(res.error||'?')+'</div>';
       return;
     }
-    detailLogLoaded = true;
+    c.loaded = true;
     var rows = res.data || [];
     if (!rows.length) {
+      var emptyHint = scope === 'outdoor'
+        ? 'Erledigte Events werden automatisch protokolliert — Fotos kannst du oben ergänzen.'
+        : 'Gießen, Düngen, Umtopfen und erledigte Events werden automatisch protokolliert — Fotos kannst du oben ergänzen.';
       list.innerHTML = '<div class="empty" style="padding:2rem 1rem">Noch keine Einträge.<br>'+
-        '<span style="font-size:12.5px;color:var(--muted)">Gießen, Düngen, Umtopfen und erledigte Events werden automatisch protokolliert — Fotos kannst du oben ergänzen.</span></div>';
+        '<span style="font-size:12.5px;color:var(--muted)">'+emptyHint+'</span></div>';
       return;
     }
     var icons = {water:'💧', fertilize:'🌱', repot:'🪴', event:'📌', photo:'📷'};
@@ -4421,7 +4450,7 @@ function renderDetailLog() {
       var dTxt = r.date ? (isNaN(dd.getTime()) ? r.date : dd.toLocaleDateString('de-DE', {day:'2-digit', month:'short', year:'numeric'})) : '';
       var photoPart = '';
       if (r.photoId) {
-        var bid = 'logphoto-btn-'+i;
+        var bid = c.prefix+'-photo-btn-'+i;
         photoPart = '<div><button class="act-btn" id="'+bid+'" onclick="loadLogPhoto(\''+esc(r.photoId)+'\',\''+bid+'\')">Foto anzeigen</button></div>';
       }
       return '<div class="log-row">'+
@@ -4434,7 +4463,6 @@ function renderDetailLog() {
     list.innerHTML = '<div class="empty" style="padding:2rem 1rem;color:var(--danger)">Verbindungsfehler.</div>';
   });
 }
-
 function renderDetailModal() {
   if (!detailPlantId) return;
   var p = plants.find(function(x){return x.id===detailPlantId;});
@@ -7406,6 +7434,7 @@ function markOutdoorEventDone(plantId, eventDate) {
   }
   if (idx < 0) return;
   var prev = p.seasonalEvents;
+  var doneText = events[idx].text; // fuer Pflegelog, bevor das Datum verschoben wird
   var n = parseInt(events[idx].recurYears, 10) || 1;
   events[idx].date = addYears(events[idx].date, n);
   var newStr = serializeEvents(events);
@@ -7421,6 +7450,8 @@ function markOutdoorEventDone(plantId, eventDate) {
       return;
     }
     toast(msgOk);
+    // Pflegelog (Phase J2): erledigtes Outdoor-Event mit Original-Datum protokollieren
+    logCare(plantId, 'event', doneText, eventDate, 'outdoor');
     renderOutdoorBanner(); renderOutdoorGrid(); renderOutdoorTimeline();
   }).catch(function(){
     p.seasonalEvents = prev;
@@ -8038,8 +8069,12 @@ function openOutdoorDetailModal(plantId) {
   // Standard auf Info-Tab
   document.getElementById('op-detail-tab-info').classList.add('on');
   document.getElementById('op-detail-tab-care').classList.remove('on');
+  document.getElementById('op-detail-tab-log').classList.remove('on');
   document.getElementById('op-detail-panel-info').style.display = '';
   document.getElementById('op-detail-panel-care').style.display = 'none';
+  document.getElementById('op-detail-panel-log').style.display = 'none';
+  journalCtx.outdoor.loaded = false; // Historie je Pflanze frisch laden (Phase J2)
+  document.getElementById('op-detail-panel-log').innerHTML = '';
   renderOutdoorDetailInfo(p);
   renderOutdoorDetailCare(p);
   document.getElementById('op-detail-overlay').classList.remove('hidden');
@@ -8051,11 +8086,12 @@ function closeOutdoorDetailModal() {
 }
 
 function showOutdoorDetailTab(tab) {
-  var tabs = ['info','care'];
+  var tabs = ['info','care','log'];
   tabs.forEach(function(t) {
     document.getElementById('op-detail-tab-' + t).classList.toggle('on', t === tab);
     document.getElementById('op-detail-panel-' + t).style.display = t === tab ? '' : 'none';
   });
+  if (tab === 'log') renderDetailLog('outdoor'); // Phase J2
 }
 
 function renderOutdoorDetailInfo(p) {
