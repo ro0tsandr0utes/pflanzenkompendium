@@ -350,6 +350,13 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .diag-sec { font-weight: 600; font-size: 13px; margin: .75rem 0 .25rem; color: var(--g2); }
 .diag-list { margin: 0; padding-left: 1.25rem; line-height: 1.55; }
 .diag-list li { margin-bottom: 3px; }
+/* Raum-Label auf Karten und im Detail-Modal (Phase RM1) */
+.card-room { font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
+/* Dosis-Edit im Detail-Modal (Phase 5h) */
+.dose-edit { margin-top: .6rem; display: flex; flex-direction: column; gap: 6px; }
+.dose-edit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dose-edit-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dose-edit-select { background: white; font-size: 13px; padding: 4px 8px; flex: 1; min-width: 84px; }
 
 .detail-body {
   padding: 1.5rem 1.75rem 1.75rem;
@@ -1288,6 +1295,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <input class="search" id="srch" placeholder="Pflanze suchen…" oninput="renderGrid()" />
       <select class="fsel" id="fsub" onchange="renderGrid()"><option value="">Alle Substrate</option></select>
       <select class="fsel" id="ffert" onchange="renderGrid()"><option value="">Alle Dünger</option></select>
+      <select class="fsel" id="froom" onchange="renderGrid()" style="display:none"><option value="">Alle Räume</option></select>
       <button class="btn" id="due-toggle" onclick="toggleDueFilter()" style="display:none">Nur fällige</button>
       <button class="btn primary" onclick="openAddForm()">+ Pflanze</button>
     </div>
@@ -1300,7 +1308,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <div style="display:flex;gap:6px">
             <input class="form-input" id="f-name" placeholder="z.B. Philodendron gloriosum" style="flex:1" />
             <button class="btn" id="f-photo-btn" type="button" title="Pflanze per Foto erkennen" onclick="document.getElementById('f-photo').click()">📷</button>
-            <input type="file" id="f-photo" accept="image/*" style="display:none" onchange="identifyPlantPhoto(this)" />
+            <input type="file" id="f-photo" accept="image/*" style="display:none" onchange="identifyPlantPhoto(this,'indoor')" />
           </div>
           <div id="f-photo-status" style="font-size:12.5px;margin-top:4px;min-height:16px;color:var(--muted)"></div>
         </div>
@@ -1313,6 +1321,11 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
         <div class="form-group">
           <label class="form-label">Notizen</label>
           <input class="form-input" id="f-notes" placeholder="Standort, Herkunft, Besonderheiten…" />
+        </div>
+        <div class="form-group" style="max-width:220px">
+          <label class="form-label">Raum</label>
+          <input class="form-input" id="f-room" list="room-list" placeholder="z.B. Wohnzimmer" />
+          <datalist id="room-list"></datalist>
         </div>
       </div>
       <div class="form-row" style="margin-bottom:.5rem">
@@ -1371,9 +1384,9 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <div class="diag-hint">Foto einer kränkelnden Pflanze hochladen — die KI erkennt Krankheiten, Schädlinge und Pflegefehler und schlägt Maßnahmen vor.</div>
       <div class="diag-controls">
         <button class="btn" type="button" onclick="document.getElementById('diag-photo').click()">📷 Foto wählen</button>
-        <input type="file" id="diag-photo" accept="image/*" style="display:none" onchange="diagPhotoChosen(this)" />
+        <input type="file" id="diag-photo" accept="image/*" style="display:none" onchange="diagPhotoChosen(this,'diag')" />
         <input class="form-input" id="diag-context" placeholder="Optional: Symptome/Kontext, z.B. gelbe Blätter seit 2 Wochen, Südfenster" style="flex:1;min-width:200px" />
-        <button class="btn primary" id="diag-run-btn" onclick="runPhotoDiagnosis()" disabled>Diagnose starten</button>
+        <button class="btn primary" id="diag-run-btn" onclick="runPhotoDiagnosis('diag')" disabled>Diagnose starten</button>
       </div>
       <div id="diag-preview" style="margin-top:.6rem"></div>
       <div id="diag-result"></div>
@@ -1468,6 +1481,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
           <input class="form-input" id="ff-desc" placeholder="NPK-Werte, Dosierung, Eigenschaften…" />
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Dosierung</label>
+          <input class="form-input" id="ff-dosage" placeholder="z.B. 5 ml auf 1 L Gießwasser" />
+        </div>
+      </div>
       <div class="form-row" style="margin-bottom:.5rem">
         <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;max-width:200px">
           <input type="checkbox" id="ff-leer" style="width:16px;height:16px" />
@@ -1506,7 +1525,12 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <div class="form-row">
         <div class="form-group" style="flex:2;min-width:180px">
           <label class="form-label">Name *</label>
-          <input class="form-input" id="op-f-name" placeholder="z.B. Hortensie 'Endless Summer'" />
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="op-f-name" placeholder="z.B. Hortensie 'Endless Summer'" style="flex:1" />
+            <button class="btn" id="op-photo-btn" type="button" title="Pflanze per Foto erkennen" onclick="document.getElementById('op-photo').click()">📷</button>
+            <input type="file" id="op-photo" accept="image/*" style="display:none" onchange="identifyPlantPhoto(this,'outdoor')" />
+          </div>
+          <div id="op-photo-status" style="font-size:12.5px;margin-top:4px;min-height:16px;color:var(--muted)"></div>
         </div>
         <div class="form-group" style="max-width:240px">
           <label class="form-label">Bereich</label>
@@ -1585,6 +1609,19 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
       <span class="zone-empty-hint">Lege Pflanzen einzeln an oder migriere die Bestandsliste.</span><br>
       <button class="btn" style="margin-top:1rem" onclick="seedOutdoorPlantsUi()">Pflanzen aus Bestandsliste laden</button>
     </div>
+
+    <div class="diag-box">
+      <div class="diag-title">🩺 Foto-Diagnose</div>
+      <div class="diag-hint">Foto einer kränkelnden Gartenpflanze hochladen — die KI erkennt Krankheiten, Schädlinge und Pflegefehler und schlägt Maßnahmen vor.</div>
+      <div class="diag-controls">
+        <button class="btn" type="button" onclick="document.getElementById('odiag-photo').click()">📷 Foto wählen</button>
+        <input type="file" id="odiag-photo" accept="image/*" style="display:none" onchange="diagPhotoChosen(this,'odiag')" />
+        <input class="form-input" id="odiag-context" placeholder="Optional: Symptome/Kontext, z.B. braune Blattränder seit der Hitzewelle" style="flex:1;min-width:200px" />
+        <button class="btn primary" id="odiag-run-btn" onclick="runPhotoDiagnosis('odiag')" disabled>Diagnose starten</button>
+      </div>
+      <div id="odiag-preview" style="margin-top:.6rem"></div>
+      <div id="odiag-result"></div>
+    </div>
   </div>
   <div id="panel-out-bereiche" class="panel">
     <div class="toolbar">
@@ -1631,7 +1668,7 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 // Build-Kennung: wird im Einstellungs-Modal angezeigt und beim Start in die
 // Konsole geloggt. Bei jeder Auslieferung hochzaehlen - damit ist sofort
 // pruefbar, ob Browser/Handy wirklich den neuen Stand geladen haben.
-var PFK_BUILD = '2026-07-07 F1.1';
+var PFK_BUILD = '2026-07-07 RF2.1';
 
 var COLORS = ['#5B8F3B','#1B9E75','#BA7017','#2B5516','#0F6E56','#534AB7','#993C1D','#686860'];
 var BGS    = ['#EBF3E0','#E1F5EE','#FBF0E0','#D4E8C2','#9FE1CB','#EEEDFE','#FAECE7','#F0EFE8'];
@@ -2108,19 +2145,27 @@ function aiVisionRequest(base64Jpeg, promptText, maxTokens, cb) {
 }
 
 // --- Identifikation beim Hinzufuegen: Foto -> Name ins Formular ---
-function identifyPlantPhoto(input) {
+// mode 'indoor' (Standard) oder 'outdoor' - steuert Ziel-Felder und Prompt-Kontext
+function identifyPlantPhoto(input, mode) {
+  var isOutdoor = mode === 'outdoor';
+  var ids = isOutdoor
+    ? {status:'op-photo-status', btn:'op-photo-btn', name:'op-f-name', notes:'op-f-notes'}
+    : {status:'f-photo-status',  btn:'f-photo-btn',  name:'f-name',    notes:'f-notes'};
   var file = input.files && input.files[0];
   input.value = ''; // Reset, damit dieselbe Datei erneut waehlbar ist
   if (!file) return;
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
-  var st = document.getElementById('f-photo-status');
-  var btn = document.getElementById('f-photo-btn');
+  var st = document.getElementById(ids.status);
+  var btn = document.getElementById(ids.btn);
   st.textContent = 'Erkenne Pflanze…';
   st.style.color = 'var(--muted)';
   btn.disabled = true;
   readImageAsJpegBase64(file, 1568, function(err, b64) {
     if (err) { st.textContent = err.message; st.style.color = 'var(--danger)'; btn.disabled = false; return; }
-    var prompt = 'Identifiziere die Pflanze auf dem Foto (vermutlich Zimmerpflanze). '+
+    var kontext = isOutdoor
+      ? 'Garten-/Outdoor-Pflanze im Freiland, Standort Brandenburg, Deutschland'
+      : 'vermutlich Zimmerpflanze';
+    var prompt = 'Identifiziere die Pflanze auf dem Foto ('+kontext+'). '+
       'Antworte NUR mit JSON:\n'+
       '{"name":"Deutscher Name (Botanischer Name)","confidence":"hoch|mittel|niedrig",'+
       '"alternatives":["...","..."],"hinweis":"..."}\n'+
@@ -2131,9 +2176,9 @@ function identifyPlantPhoto(input) {
       btn.disabled = false;
       if (apiErr) { st.textContent = apiErr; st.style.color = 'var(--danger)'; return; }
       if (!obj.name) { st.textContent = 'Keine Pflanze erkannt.'; st.style.color = 'var(--danger)'; return; }
-      document.getElementById('f-name').value = obj.name;
+      document.getElementById(ids.name).value = obj.name;
       // Hinweis in Notizen uebernehmen, aber nur wenn Notizen noch leer sind
-      var notesEl = document.getElementById('f-notes');
+      var notesEl = document.getElementById(ids.notes);
       if (obj.hinweis && !notesEl.value.trim()) notesEl.value = obj.hinweis;
       var confMap = {hoch:'✓ Erkannt', mittel:'✓ Erkannt (mittlere Sicherheit)', niedrig:'⚠ Unsicher erkannt'};
       var msg = confMap[obj.confidence] || '✓ Erkannt';
@@ -2146,38 +2191,45 @@ function identifyPlantPhoto(input) {
   });
 }
 
-// --- Foto-Diagnose im Lookup-Tab ---
-var diagFile = null;
-var diagObjectUrl = null;
+// --- Foto-Diagnose (Indoor: Lookup-Tab, Praefix 'diag'; Outdoor:
+// Sammlung-Tab, Praefix 'odiag'). State pro Praefix, gleiche Logik. ---
+var diagState = {};
 
-function diagPhotoChosen(input) {
+function diagPhotoChosen(input, prefix) {
+  prefix = prefix || 'diag';
+  var st = diagState[prefix] || (diagState[prefix] = {file:null, url:null});
   var file = input.files && input.files[0];
   input.value = '';
   if (!file) return;
-  diagFile = file;
-  if (diagObjectUrl) { try { URL.revokeObjectURL(diagObjectUrl); } catch(e){} }
-  diagObjectUrl = URL.createObjectURL(file);
-  document.getElementById('diag-preview').innerHTML =
-    '<img src="'+diagObjectUrl+'" alt="Foto-Vorschau" style="max-height:130px;max-width:100%;border-radius:8px;border:1px solid var(--border)" />';
-  document.getElementById('diag-run-btn').disabled = false;
-  document.getElementById('diag-result').innerHTML = '';
+  st.file = file;
+  if (st.url) { try { URL.revokeObjectURL(st.url); } catch(e){} }
+  st.url = URL.createObjectURL(file);
+  document.getElementById(prefix+'-preview').innerHTML =
+    '<img src="'+st.url+'" alt="Foto-Vorschau" style="max-height:130px;max-width:100%;border-radius:8px;border:1px solid var(--border)" />';
+  document.getElementById(prefix+'-run-btn').disabled = false;
+  document.getElementById(prefix+'-result').innerHTML = '';
 }
 
-function runPhotoDiagnosis() {
-  if (!diagFile) return;
+function runPhotoDiagnosis(prefix) {
+  prefix = prefix || 'diag';
+  var st = diagState[prefix];
+  if (!st || !st.file) return;
   if (!cfg.key) { toast('Kein API Key hinterlegt.'); return; }
-  var btn = document.getElementById('diag-run-btn');
-  var box = document.getElementById('diag-result');
+  var btn = document.getElementById(prefix+'-run-btn');
+  var box = document.getElementById(prefix+'-result');
   btn.disabled = true;
   box.innerHTML = '<div class="care-placeholder"><div class="spinner"></div><br><span class="ldots">Diagnose läuft</span></div>';
-  var context = document.getElementById('diag-context').value.trim();
-  readImageAsJpegBase64(diagFile, 1568, function(err, b64) {
+  var context = document.getElementById(prefix+'-context').value.trim();
+  readImageAsJpegBase64(st.file, 1568, function(err, b64) {
     if (err) {
       box.innerHTML = '<div style="color:var(--danger);font-size:14px;padding:.5rem 0">'+esc(err.message)+'</div>';
       btn.disabled = false;
       return;
     }
-    var prompt = 'Auf dem Foto ist eine Pflanze mit moeglichen Problemen (Krankheit, Schaedlinge, Pflegefehler). '+
+    var umgebung = prefix === 'odiag'
+      ? 'Gartenpflanze im Freiland, Standort Brandenburg, Deutschland. Beruecksichtige Freiland-Ursachen wie Frost, Hitze, Staunaesse, Wild- und Schaedlingsfrass. '
+      : 'Vermutlich Zimmerpflanze. ';
+    var prompt = 'Auf dem Foto ist eine Pflanze mit moeglichen Problemen (Krankheit, Schaedlinge, Pflegefehler). '+umgebung+
       (context ? 'Zusatzinfo vom Besitzer: "'+context.replace(/"/g, "'")+'". ' : '') +
       'Diagnostiziere anhand des Fotos. Antworte NUR mit JSON:\n'+
       '{"pflanze":"erkannte Pflanze oder leer","gesund":true|false,"diagnose":"...",'+
@@ -2194,13 +2246,13 @@ function runPhotoDiagnosis() {
         box.innerHTML = '<div style="color:var(--danger);font-size:14px;padding:.5rem 0">'+esc(apiErr)+'</div>';
         return;
       }
-      renderDiagnosisResult(obj);
+      renderDiagnosisResult(obj, prefix);
     });
   });
 }
 
-function renderDiagnosisResult(obj) {
-  var box = document.getElementById('diag-result');
+function renderDiagnosisResult(obj, prefix) {
+  var box = document.getElementById((prefix || 'diag')+'-result');
   var sevColors = {leicht:'#2E7D32', mittel:'#B26A00', ernst:'#B71C1C'};
   var sevBgs = {leicht:'#E7F2E4', mittel:'#FBF0DC', ernst:'#FBE4E4'};
   var sev = obj.schweregrad || '';
@@ -2382,6 +2434,7 @@ function mixAiSuggest() {
 
 function renderAll() {
   renderBanner();
+  fillRoomFilter();
   renderGrid(); renderSubSelects();
   renderCalendarPanel();
   renderSubList();
@@ -2659,14 +2712,53 @@ function renderQuickActions(p) {
   return html;
 }
 
+// Raeume (Phase RM1): eindeutige, sortierte Liste aller vergebenen Raeume
+function roomList() {
+  var seen = {};
+  var out = [];
+  plants.forEach(function(p){
+    var r = (p.room || '').trim();
+    if (r && !seen[r]) { seen[r] = true; out.push(r); }
+  });
+  out.sort(function(a,b){ return a.localeCompare(b, 'de'); });
+  return out;
+}
+
+// Datalist im Formular: vorhandene Raeume als Vorschlaege (keine eigene
+// Raum-Verwaltung noetig - Raeume entstehen und verschwinden mit den Pflanzen)
+function fillRoomDatalist() {
+  var dl = document.getElementById('room-list');
+  if (!dl) return;
+  dl.innerHTML = roomList().map(function(r){ return '<option value="'+esc(r)+'"></option>'; }).join('');
+}
+
+// Raum-Filter in der Toolbar: nur sichtbar wenn mindestens ein Raum vergeben
+// ist. Auswahl bleibt ueber Rebuilds erhalten (faellt auf '' zurueck, wenn
+// der gewaehlte Raum nicht mehr existiert).
+function fillRoomFilter() {
+  var sel = document.getElementById('froom');
+  if (!sel) return;
+  var rooms = roomList();
+  var current = sel.value;
+  sel.innerHTML = '<option value="">Alle Räume</option>' +
+    rooms.map(function(r){ return '<option value="'+esc(r)+'"'+(r===current?' selected':'')+'>'+esc(r)+'</option>'; }).join('');
+  sel.style.display = rooms.length ? '' : 'none';
+  if (rooms.indexOf(current) < 0) sel.value = '';
+}
+
 function renderGrid() {
   var q=(document.getElementById('srch').value||'').toLowerCase();
   var fid=document.getElementById('fsub').value;
   var fertSelEl = document.getElementById('ffert');
   var fertFilter = fertSelEl ? fertSelEl.value : '';
+  var roomSelEl = document.getElementById('froom');
+  var roomFilter = roomSelEl ? roomSelEl.value : '';
   var vis=plants.filter(function(p){
     if (q && p.name.toLowerCase().indexOf(q)<0) return false;
     if (fid && p.subId!==fid) return false;
+    // Raum-Filter (Phase RM1): kombiniert sich per UND mit Substrat-,
+    // Duenger- und Faelligkeits-Filter
+    if (roomFilter && (p.room||'').trim() !== roomFilter) return false;
     if (fertFilter) {
       // "__none__" = nur Pflanzen mit Duenge-Intervall > 0 aber ohne Duenger-Zuordnung
       if (fertFilter === '__none__') {
@@ -2687,7 +2779,8 @@ function renderGrid() {
     grid.innerHTML='';
     empty.style.display='block';
     var msg;
-    if (dueFilterOn && fertFilter) msg = 'Keine fälligen Pflanzen mit diesem Dünger.';
+    if (dueFilterOn && roomFilter) msg = 'Keine fälligen Pflanzen in diesem Raum. 🎉';
+    else if (dueFilterOn && fertFilter) msg = 'Keine fälligen Pflanzen mit diesem Dünger.';
     else if (dueFilterOn) msg = 'Keine fälligen Pflanzen.';
     else if (fertFilter === '__none__') msg = 'Alle düngebedürftigen Pflanzen haben einen Dünger zugeordnet.';
     else if (fertFilter) msg = 'Keine Pflanzen mit diesem Dünger.';
@@ -2700,6 +2793,7 @@ function renderGrid() {
     var hasMix=p.subMix&&p.subMix.trim();
     return '<div class="card">'+
       '<div class="card-name">'+esc(p.name)+'</div>'+
+      (p.room ? '<div class="card-room">📍 '+esc(p.room)+'</div>' : '')+
       renderMixBadges(p.subMix,p.subId)+
       renderDueBadges(p)+
       (p.notes?'<div class="card-notes">'+esc(p.notes)+'</div>':'')+
@@ -3238,6 +3332,7 @@ function renderFertList() {
           tags+
         '</div>'+
         '<div class="sub-desc">'+esc(f.desc||'')+'</div>'+
+        (f.dosage ? '<div class="sub-desc" style="color:var(--g2)">🧪 '+esc(f.dosage)+'</div>' : '')+
         '<div class="sub-actions">'+
           '<button class="act-btn" onclick="startEditFert(\''+f.id+'\')">Bearbeiten</button>'+
           reassignBtn+
@@ -3257,6 +3352,7 @@ function openFertForm() {
   document.getElementById('fert-form-title').textContent = 'Dünger hinzufügen';
   document.getElementById('ff-name').value = '';
   document.getElementById('ff-desc').value = '';
+  document.getElementById('ff-dosage').value = '';
   document.getElementById('ff-cat').value = 'green';
   document.getElementById('ff-usage').value = 'indoor';
   document.getElementById('ff-leer').checked = false;
@@ -3274,6 +3370,7 @@ function startEditFert(id) {
   document.getElementById('fert-form-title').textContent = 'Dünger bearbeiten ('+id+')';
   document.getElementById('ff-name').value = f.name || '';
   document.getElementById('ff-desc').value = f.desc || '';
+  document.getElementById('ff-dosage').value = f.dosage || '';
   document.getElementById('ff-cat').value = f.category || 'universal';
   document.getElementById('ff-usage').value = f.usage || 'indoor';
   document.getElementById('ff-leer').checked = !!f.leer;
@@ -3301,6 +3398,7 @@ function nextFertId() {
 function saveFertForm() {
   var name = document.getElementById('ff-name').value.trim();
   var desc = document.getElementById('ff-desc').value.trim();
+  var dosage = document.getElementById('ff-dosage').value.trim();
   var cat = document.getElementById('ff-cat').value;
   var usage = document.getElementById('ff-usage').value;
   var leer = document.getElementById('ff-leer').checked;
@@ -3312,16 +3410,16 @@ function saveFertForm() {
   document.getElementById('ff-err').textContent = '';
   apiFetch({
     action: isEdit ? 'updateFert' : 'addFert',
-    id: id, name: name, desc: desc, category: cat, usage: usage,
+    id: id, name: name, desc: desc, dosage: dosage, category: cat, usage: usage,
     leer: leer ? 'true' : 'false',
     active: active ? 'true' : 'false'
   }).then(function(res){
     if (res.ok) {
       if (isEdit) {
         var f = fertById(id);
-        if (f) { f.name=name; f.desc=desc; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
+        if (f) { f.name=name; f.desc=desc; f.dosage=dosage; f.category=cat; f.usage=usage; f.leer=leer; f.active=active; }
       } else {
-        FERTS.push({id:id, name:name, desc:desc, category:cat, usage:usage, leer:leer, active:active});
+        FERTS.push({id:id, name:name, desc:desc, dosage:dosage, category:cat, usage:usage, leer:leer, active:active});
       }
       var wasNew = !isEdit;
       fertEditId = null;
@@ -3568,6 +3666,8 @@ function openAddForm() {
   document.getElementById('f-name').value='';
   document.getElementById('f-sub').value='s5';
   document.getElementById('f-notes').value='';
+  document.getElementById('f-room').value='';
+  fillRoomDatalist();
   document.getElementById('f-water-weeks').value='';
   document.getElementById('f-fert-weeks').value='';
   document.getElementById('f-err').textContent='';
@@ -3584,6 +3684,8 @@ function startEdit(id) {
   document.getElementById('f-name').value=p.name;
   document.getElementById('f-sub').value=p.subId;
   document.getElementById('f-notes').value=p.notes||'';
+  document.getElementById('f-room').value=p.room||'';
+  fillRoomDatalist();
   document.getElementById('f-water-weeks').value=p.wateringIntervalWeeks||'';
   document.getElementById('f-fert-weeks').value=p.fertilizingIntervalWeeks||'';
   document.getElementById('f-err').textContent='';
@@ -3603,6 +3705,7 @@ function saveForm() {
   var name=document.getElementById('f-name').value.trim();
   var subId=document.getElementById('f-sub').value;
   var notes=document.getElementById('f-notes').value.trim();
+  var room=document.getElementById('f-room').value.trim();
   var wWeeks=document.getElementById('f-water-weeks').value.trim();
   var fWeeks=document.getElementById('f-fert-weeks').value.trim();
   if (!name){document.getElementById('f-err').textContent='Name fehlt';return;}
@@ -3622,7 +3725,7 @@ function saveForm() {
   document.getElementById('f-err').textContent='';
   var payload = {
     action: isEdit?'update':'add',
-    id: id, name: name, subId: subId, subMix: subMix, notes: notes,
+    id: id, name: name, subId: subId, subMix: subMix, notes: notes, room: room,
     wateringIntervalWeeks: wWeeks,
     fertilizingIntervalWeeks: fWeeks
   };
@@ -3633,14 +3736,14 @@ function saveForm() {
       if (isEdit){
         var p=plants.find(function(x){return x.id===id;});
         if(p){
-          p.name=name; p.subId=subId; p.subMix=subMix; p.notes=notes;
+          p.name=name; p.subId=subId; p.subMix=subMix; p.notes=notes; p.room=room;
           p.wateringIntervalWeeks=wWeeks;
           p.fertilizingIntervalWeeks=fWeeks;
           if (invalidate) { p.carePlan=''; p.carePlanAt=''; }
         }
       } else {
         plants.push({
-          id:id, name:name, subId:subId, subMix:subMix, notes:notes,
+          id:id, name:name, subId:subId, subMix:subMix, notes:notes, room:room,
           wateringIntervalWeeks:wWeeks, fertilizingIntervalWeeks:fWeeks,
           lastWatered:'', lastFertilized:'',
           carePlan:'', carePlanAt:''
@@ -4159,6 +4262,46 @@ function renderDetailModal() {
   renderDetailCare(p);
 }
 
+// Countdown fuer Mehrjahres-Events (Phase 5h): "noch X Jahre" bis zum
+// naechsten Faelligkeitsjahr des Events. Nur fuer recurYears > 1 gedacht.
+function recurCountdownTxt(ev) {
+  var yrs = parseInt(String(ev.date).substring(0, 4), 10) - (new Date()).getFullYear();
+  if (isNaN(yrs)) return '';
+  if (yrs <= 0) return 'dieses Jahr';
+  if (yrs === 1) return 'noch 1 Jahr';
+  return 'noch ' + yrs + ' Jahre';
+}
+
+// Manuelles Editieren der Dosis-/Wachstumsfelder im Detail-Modal (Phase 5h).
+// Leerer Wert loescht das Feld. Optimistisch mit Rollback; bei Erfolg wird
+// der Pflegeplan-Tab (doseInfo-Box) und die Sammlung mit aktualisiert.
+function setPlantDoseField(plantId, field, value) {
+  var allowed = ['fertDoseGrowth', 'fertDoseDormant', 'growthMonthStart', 'growthMonthEnd'];
+  if (allowed.indexOf(field) < 0) return;
+  var p = plants.find(function(x){return x.id===plantId;});
+  if (!p) return;
+  var prev = p[field];
+  p[field] = value;
+  var payload = {action:'update', id:plantId};
+  payload[field] = value;
+  apiFetch(payload).then(function(res){
+    if (!res.ok) {
+      p[field] = prev;
+      toast('Fehler: '+(res.error||'?'));
+      renderDetailInfo(p); // Selects auf Rollback-Stand zuruecksetzen
+      return;
+    }
+    toast('Gespeichert');
+    renderDetailCare(p);
+    renderBanner();
+    renderGrid();
+  }).catch(function(){
+    p[field] = prev;
+    toast('Verbindungsfehler');
+    renderDetailInfo(p);
+  });
+}
+
 function renderDetailInfo(p) {
   var box = document.getElementById('detail-panel-info');
   // Substrat-Mix
@@ -4184,7 +4327,7 @@ function renderDetailInfo(p) {
       var eDate = dayStart(new Date(ev.date));
       var isActive = daysBetween(eDate, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, eDate) > 0;
       var rec = parseInt(ev.recurYears, 10) || 1;
-      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
+      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre · '+recurCountdownTxt(ev)+'</span>' : '';
       return '<div class="detail-event-row'+(isActive?' active':'')+'">'+
         '<span class="detail-event-date">'+esc(fmtDate(ev.date))+'</span>'+
         '<span class="detail-event-text">'+esc(ev.text)+recPill+'</span>'+
@@ -4213,17 +4356,42 @@ function renderDetailInfo(p) {
         var leerTag = f.leer ? ' (Restbestand)' : '';
         return '<option value="'+f.id+'"'+sel+'>'+cat.icon+' '+f.name+' ['+cat.label+']'+leerTag+inactiveTag+'</option>';
       }).join('');
+    // Manuelles Editieren der Dosis-/Wachstumsfelder (Phase 5h) - bisher
+    // nur ueber die KI-Generierung befuellbar
+    var doseSel = function(field, val) {
+      var opts = ['', 'voll', 'halb', 'viertel', 'aussetzen'];
+      return '<select class="form-select dose-edit-select" onchange="setPlantDoseField(\''+p.id+'\',\''+field+'\',this.value)">'+
+        opts.map(function(o){ return '<option value="'+o+'"'+(String(val||'')===o?' selected':'')+'>'+(o||'–')+'</option>'; }).join('')+
+      '</select>';
+    };
+    var monthSel = function(field, val) {
+      var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      var h = '<option value="">–</option>';
+      for (var mi = 1; mi <= 12; mi++) h += '<option value="'+mi+'"'+(parseInt(val)===mi?' selected':'')+'>'+months[mi-1]+'</option>';
+      return '<select class="form-select dose-edit-select" onchange="setPlantDoseField(\''+p.id+'\',\''+field+'\',this.value)">'+h+'</select>';
+    };
     fertHtml =
       '<div class="detail-section">'+
         '<div class="detail-label">Dünger</div>'+
         '<select class="form-select" onchange="setPlantFert(\''+p.id+'\',this.value)" style="width:100%;background:white">'+
           fertOptions+
         '</select>'+
+        '<div class="dose-edit">'+
+          '<div class="dose-edit-row">'+
+            '<span class="dose-edit-label">Dosis Wachstum</span>'+doseSel('fertDoseGrowth', p.fertDoseGrowth)+
+            '<span class="dose-edit-label">Dosis Ruhe</span>'+doseSel('fertDoseDormant', p.fertDoseDormant)+
+          '</div>'+
+          '<div class="dose-edit-row">'+
+            '<span class="dose-edit-label">Wachstum von</span>'+monthSel('growthMonthStart', p.growthMonthStart)+
+            '<span class="dose-edit-label">bis</span>'+monthSel('growthMonthEnd', p.growthMonthEnd)+
+          '</div>'+
+        '</div>'+
       '</div>';
   }
 
   box.innerHTML =
     '<div class="detail-name">'+esc(p.name)+'</div>'+
+    (p.room ? '<div class="card-room" style="margin-top:-6px;margin-bottom:10px">📍 '+esc(p.room)+'</div>' : '')+
     '<div class="detail-section">'+
       '<div class="detail-label">Substrat-Mix</div>'+
       '<div class="detail-value">'+mixHtml+'</div>'+
@@ -4297,15 +4465,13 @@ function renderDetailCare(p) {
     meta = '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Gespeichert am '+esc(dStr)+'</div>';
   }
 
-  // Dosis-Info: nur wenn Pflanze geduengt wird und Dosis-Felder gesetzt sind
+  // Dosis-Info: wenn Pflanze geduengt wird und Dosis-Felder gesetzt sind
+  // oder der zugeordnete Duenger einen Dosierungs-Hinweis hat (Phase 5h)
   var doseInfo = '';
   var fWeeks = parseInt(p.fertilizingIntervalWeeks);
-  if (fWeeks > 0 && (p.fertDoseGrowth || p.fertDoseDormant)) {
-    var phase = currentDosePhase(p);
-    var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
-    var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
-    var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
-    var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
+  var assignedFert = p.fertilizerId ? fertById(p.fertilizerId) : null;
+  var dosageTxt = assignedFert && assignedFert.dosage ? String(assignedFert.dosage) : '';
+  if (fWeeks > 0 && (p.fertDoseGrowth || p.fertDoseDormant || dosageTxt)) {
     var monthRange = '';
     if (p.growthMonthStart && p.growthMonthEnd) {
       var months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
@@ -4314,13 +4480,27 @@ function renderDetailCare(p) {
         monthRange = ' (Wachstum: '+months[s-1]+'–'+months[e-1]+')';
       }
     }
-    var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
-    var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
+    var doseLines = '';
+    if (p.fertDoseGrowth || p.fertDoseDormant) {
+      var phase = currentDosePhase(p);
+      var currentDose = phase === 'growth' ? p.fertDoseGrowth : p.fertDoseDormant;
+      var otherDose = phase === 'growth' ? p.fertDoseDormant : p.fertDoseGrowth;
+      var phaseLabel = phase === 'growth' ? 'Wachstumsphase' : 'Ruhephase';
+      var otherPhaseLabel = phase === 'growth' ? 'Ruhephase' : 'Wachstumsphase';
+      var currentTxt = doseShortLabel(currentDose) || (currentDose ? currentDose : '–');
+      var otherTxt = doseShortLabel(otherDose) || (otherDose ? otherDose : '–');
+      doseLines =
+        '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
+        (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '');
+    }
+    var dosageLine = dosageTxt
+      ? '<div style="color:var(--text);margin-top:2px">🧪 Dosierung '+esc(assignedFert.name)+': '+esc(dosageTxt)+'</div>'
+      : '';
     doseInfo =
       '<div style="background:var(--gl);border-left:3px solid var(--g3);border-radius:6px;padding:10px 14px;margin-bottom:1rem;font-size:13px;line-height:1.6">'+
         '<div style="font-weight:500;color:var(--g1);margin-bottom:4px">Aktuelle Düngung'+esc(monthRange)+'</div>'+
-        '<div style="color:var(--text)">Jetzt ('+esc(phaseLabel)+'): <strong>'+esc(currentTxt)+'</strong></div>'+
-        (otherDose ? '<div style="color:var(--muted);font-size:12px">Sonst ('+esc(otherPhaseLabel)+'): '+esc(otherTxt)+'</div>' : '')+
+        doseLines+
+        dosageLine+
       '</div>';
   }
 
@@ -7766,7 +7946,7 @@ function renderOutdoorDetailInfo(p) {
       var eDate = dayStart(new Date(ev.date));
       var isActive = daysBetween(eDate, thisWeekStart) >= 0 && daysBetween(thisWeekEnd, eDate) > 0;
       var rec = parseInt(ev.recurYears, 10) || 1;
-      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre</span>' : '';
+      var recPill = rec > 1 ? ' <span class="recur-pill">alle '+rec+' Jahre · '+recurCountdownTxt(ev)+'</span>' : '';
       return '<div class="detail-event-row'+(isActive?' active':'')+'">'+
         '<span class="detail-event-date">'+esc(fmtDate(ev.date))+'</span>'+
         '<span class="detail-event-text">'+esc(ev.text)+recPill+'</span>'+
